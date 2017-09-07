@@ -99,7 +99,7 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     # set the index if provided
     if index_fld is not None:
         df.set_index(index_fld, inplace=True)
-        df.sort(inplace=True)
+        df.sort_index(inplace=True)
 
     return df
 
