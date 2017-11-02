@@ -180,6 +180,8 @@ def pandas_to_arc(df,
                 arr = arr.astype(np.int32)
         if arr.dtype == np.bool:
             arr = arr.astype(np.int32)
+        if arr.dtype == np.dtype('<M8[ns]'):
+            arr = arr.astype('<M8[us]')
 
         arr_values[col] = arr
         arr_dtypes.append((col, arr.dtype))
