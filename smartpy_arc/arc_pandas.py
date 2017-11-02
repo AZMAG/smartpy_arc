@@ -61,8 +61,8 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         "Integer": -1,
         "Single": -1,
         "SmallInteger": -1,
-        "String": "" #,
-        # "Date": '1800-01-01'
+        "String": "",
+        "Date": '1800-01-01'
     }
 
     # get valid fields based on their type, assign null replacement values
@@ -91,7 +91,8 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     if where is None:
         arr = arcpy.da.TableToNumPyArray(class_name, fld_names, null_value=null_dict)
     else:
-        arr = arcpy.da.TableToNumPyArray(class_name, fld_names, where_clause=where, null_value=null_dict)
+        arr = arcpy.da.TableToNumPyArray(
+            class_name, fld_names, where_clause=where, null_value=null_dict)
 
     # convert the structured array to a pandas data frame
     df = pd.DataFrame(arr)
