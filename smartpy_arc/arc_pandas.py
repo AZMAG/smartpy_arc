@@ -62,7 +62,7 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         "Single": -1,
         "SmallInteger": -1,
         "String": "",
-        "Date": '1800-01-01'
+        "Date": '1678-01-01'
     }
 
     # get valid fields based on their type, assign null replacement values
