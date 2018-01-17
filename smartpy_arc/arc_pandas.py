@@ -50,6 +50,11 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     -------
     pandas.DataFrame
 
+    Notes:
+        1 - If exporting a feature layer or table view, this will currently
+            support views that have fields that are not visivble, BUT will
+            NOT support views with fields that have been re-named.
+
     """
     # update the workspace
     arcpy.env.workspace = workspace_path
@@ -71,13 +76,13 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
 
     for fld in arcpy.ListFields(class_name):
         if flds is None or fld.name in flds:
-            if fld.type in valid_field_types:
+            if fld.type in valid_field_types and fld.name:
                 fld_names.append(str(fld.name))
                 null_dict[str(fld.name)] = valid_field_types[str(fld.type)]
 
     # add geometry properties
     desc = arcpy.Describe(class_name)
-    if desc.dataType == "FeatureClass" and spatial:
+    if desc.dataType in ["FeatureClass", "FeatureLayer"] and spatial:
         fld_names.append("SHAPE@X")
         fld_names.append("SHAPE@Y")
 
