@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 import arcpy
 
+from .arc_utils import *
+
 
 def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial=True, where=None):
     """
@@ -110,6 +112,70 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     return df
 
 
+def pandas_to_array(df, keep_index=True, cols=None):
+    """
+    Exports a pandas data from to a structured numpy array that can be
+    provided to arcpy functions.
+
+    Parameters:
+    ----------
+    df: pandas.DataFrame
+        Data frame to export.
+    keep_index: bool, optional, default True
+        If True, column(s) will be created from the index.
+    cols: list <string>, optional, default None:
+        List of fields/columns to include in output, if not provided
+        all fields will be exported. Also, include index names here.
+
+    Returns
+    -------
+    numpy structured array
+
+    """
+    # push the index into columns
+    if keep_index:
+        df = df.reset_index()
+
+    # put the pandas series into a dictionary of arrays
+    arr_values = {}
+    arr_dtypes = []
+
+    # use all columns if none provided
+    if cols is None:
+        cols = df.columns
+
+    # remove unicode from column names
+    cols = [str(item) for item in cols]
+
+    for col in cols:
+        arr = df[col].values
+
+        # convert types to make ArcGIS happy
+        if arr.dtype == np.object:
+            arr = arr.astype(unicode)
+        if arr.dtype == np.int64:
+            max_val = arr.max()
+            min_val = arr.min()
+            if min_val < -2147483647 or max_val > 2147483647:
+                arr = arr.astype(np.float64)
+            else:
+                arr = arr.astype(np.int32)
+        if arr.dtype == np.bool:
+            arr = arr.astype(np.int32)
+        if arr.dtype == np.dtype('<M8[ns]'):
+            arr = arr.astype('<M8[us]')
+
+        arr_values[col] = arr
+        arr_dtypes.append((col, arr.dtype))
+
+    # create the structured array
+    s_arr = np.empty(len(df), dtype=arr_dtypes)
+    for col in arr_values:
+        s_arr[col] = arr_values[col]
+
+    return s_arr
+
+
 def pandas_to_arc(df,
                   workspace_path,
                   output_table,
@@ -155,46 +221,8 @@ def pandas_to_arc(df,
 
     """
 
-    # push the index into columns
-    if keep_index:
-        df = df.reset_index()
-
-    # put the pandas series into a dictionary of arrays
-    arr_values = {}
-    arr_dtypes = []
-
-    # use all columns if none provided
-    if cols is None:
-        cols = df.columns
-
-    # remove unicode from column names
-    cols = [str(item) for item in cols]
-
-    for col in cols:
-        arr = df[col].values
-
-        # convert types to make ArcGIS happy
-        if arr.dtype == np.object:
-            arr = arr.astype(unicode)
-        if arr.dtype == np.int64:
-            max_val = arr.max()
-            min_val = arr.min()
-            if min_val < -2147483647 or max_val > 2147483647:
-                arr = arr.astype(np.float64)
-            else:
-                arr = arr.astype(np.int32)
-        if arr.dtype == np.bool:
-            arr = arr.astype(np.int32)
-        if arr.dtype == np.dtype('<M8[ns]'):
-            arr = arr.astype('<M8[us]')
-
-        arr_values[col] = arr
-        arr_dtypes.append((col, arr.dtype))
-
-    # create the structured array
-    s_arr = np.empty(len(df), dtype=arr_dtypes)
-    for col in arr_values:
-        s_arr[col] = arr_values[col]
+    # convert data frame to structured array
+    s_arr = pandas_to_array(df, keep_index, cols)
 
     # now export to arc
     old_workspace = arcpy.env.workspace
@@ -207,7 +235,8 @@ def pandas_to_arc(df,
 
     # convert the array to a ArcGIS table or feature class
     if x_col is not None and y_col is not None:
-        arcpy.da.NumPyArrayToFeatureClass(s_arr, workspace_path + "/" + output_table, [x_col, y_col], srs)
+        arcpy.da.NumPyArrayToFeatureClass(
+            s_arr, workspace_path + "/" + output_table, [x_col, y_col], srs)
     else:
         arcpy.da.NumPyArrayToTable(s_arr, workspace_path + "/" + output_table)
 
@@ -229,3 +258,63 @@ def pandas_to_arc(df,
     if old_workspace is not None:
         arcpy.env.workspace = old_workspace
     return out_flds, rows
+
+
+def pandas_join_to_arc(df,
+                       join_to,
+                       pandas_on,
+                       arc_on,
+                       output=None,
+                       keep_index=True,
+                       pandas_cols=None,
+                       arc_cols=None):
+    """
+    Export a pandas data frame and join it to an existing
+    feature class or table.
+
+    Parameters:
+    ----------
+    df: pandas.DataFrame
+        Data frame to export.
+    join_to: str
+        Full path to feature class, layer or table to join to.
+    pandas_on: str
+        Name of column in pandas data frame to join on.
+    arc_on: str
+        Name of field in arc dataset to join on.
+    output: str, optional, default None
+        Full path to output table or feature class.
+        If not provided, data frame fields will be appended to the existing table.
+    keep_index: bool, optional, default True
+        If True, column(s) will be created from the index.
+    pandas_cols: list <string>, optional, default None:
+        List of fields/columns to include in output, if not provided
+        all fields will be exported. Also, include index names here.
+    arc_cols: list <string>, optional, default None:
+        List of fields/columns to include from the arc dataset. If
+        omitted all columns will be included.
+
+    """
+
+    arcpy.env.qualifiedFieldNames = False
+
+    # convert data frame to structured array
+    if pandas_cols:
+        pandas_cols = list(set(pandas_cols + [pandas_on]))
+    s_arr = pandas_to_array(df, keep_index, pandas_cols)
+
+    # create the output
+    if output:
+        if arc_cols:
+            arc_cols = list(set(arc_cols + [arc_on]))
+        create_new_feature_class(join_to, output, flds=arc_cols)
+    else:
+        output = join_to
+
+    # attach the data frame
+    arcpy.da.ExtendTable(
+        output,
+        arc_on,
+        s_arr,
+        pandas_on
+    )
