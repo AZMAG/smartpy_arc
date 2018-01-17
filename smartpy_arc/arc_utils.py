@@ -7,6 +7,15 @@ ESRI data objects.
 import arcpy
 
 
+def row_count(data):
+    """
+    Return the # of rows/features in the provided data (feature class,
+    table, feature layer or table view)
+
+    """
+    return int(arcpy.GetCount_management(data).getOutput(0))
+
+
 def create_layer(layer_name, table, flds=None, where=None, shp_prefix=None):
     """
     Wraps up obtaining a feature layer and handles some of the
@@ -79,12 +88,11 @@ def create_new_feature_class(in_fc, out_fc, flds=None, where=None, shp_prefix=No
         Definition query to apply.
 
     """
-    create_layer('killme', in_fc,  flds, where, shp_prefix)
-    arcpy.CopyFeatures_management('killme', out_fc)
-    arcpy.Delete_management('killme')
+    create_layer('__killme', in_fc, flds, where, shp_prefix)
+    arcpy.CopyFeatures_management('__killme', out_fc)
+    arcpy.Delete_management('__killme')
 
     # at 10.3 field aliases persist, so set these to match the field name
     for f in arcpy.ListFields(out_fc):
         if f.name != f.aliasName:
-            arcpy.AlterField_management(out_fc, f.name, f.name, f.name)
-
+            arcpy.AlterField_management(out_fc, f.name, new_field_alias=f.name)
