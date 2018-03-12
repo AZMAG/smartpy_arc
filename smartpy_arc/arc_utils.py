@@ -16,6 +16,39 @@ def row_count(data):
     return int(arcpy.GetCount_management(data).getOutput(0))
 
 
+class TempWork():
+    """
+    Context manager for temporarily changing workspaces. Use this
+    for cases where you temporarily want to change the workspace
+    within a function and then have it revert back to the original
+    workspace upon exiting.
+
+    For example:
+
+    with TempWork(r'c:\temp') as work:
+        print arcpy.ListFeeatureClasses()
+
+    Will print the tables in the provided workspace and then
+    set the worksapce back when done.
+
+    """
+
+    def __init__(self, workspace=None):
+        self.workspace = workspace
+
+    def __enter__(self):
+        self.old_workspace = arcpy.env.workspace
+        arcpy.env.workspace = self.workspace
+
+    def __exit__(self, *args):
+        arcpy.env.workspace = self.old_workspace
+
+
+# use this get the fields in a feature class
+def list_fields(fc):
+    return [f.name for f in arcpy.ListFields(fc)]
+
+
 def create_layer(layer_name, table, flds=None, where=None, shp_prefix=None):
     """
     Wraps up obtaining a feature layer and handles some of the
