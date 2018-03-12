@@ -234,11 +234,12 @@ def pandas_to_arc(df,
             arcpy.Delete_management(output_table)
 
     # convert the array to a ArcGIS table or feature class
+    out_path = '{}/{}'.format(workspace_path, output_table)
     if x_col is not None and y_col is not None:
         arcpy.da.NumPyArrayToFeatureClass(
-            s_arr, workspace_path + "/" + output_table, [x_col, y_col], srs)
+            s_arr, out_path, [x_col, y_col], srs)
     else:
-        arcpy.da.NumPyArrayToTable(s_arr, workspace_path + "/" + output_table)
+        arcpy.da.NumPyArrayToTable(s_arr, out_path)
 
     # return a cursor with the results
     if get_cursor:
@@ -255,8 +256,7 @@ def pandas_to_arc(df,
         rows = None
 
     # return the results
-    if old_workspace is not None:
-        arcpy.env.workspace = old_workspace
+    arcpy.env.workspace = old_workspace
     return out_flds, rows
 
 
