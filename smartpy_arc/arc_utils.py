@@ -44,9 +44,47 @@ class TempWork():
         arcpy.env.workspace = self.old_workspace
 
 
-# use this get the fields in a feature class
+class CheckoutExtension():
+    """
+    Context manager for temporarily checking out an ArcGIS extension.
+    Will checkout the extension and then check it back in after
+    the code is executed.
+
+    For example:
+
+    with CheckoutExtension('spatial') as ce:
+        # generate the density surface
+        kd = KernelDensity('pnts', None, kd_resolution, kd_resolution, "SQUARE_MILES")
+
+    """
+
+    def __init__(self, name):
+        self.extension_name = name
+
+    def __enter__(self):
+        arcpy.CheckOutExtension(self.extension_name)
+
+    def __exit__(self, *args):
+        arcpy.CheckInExtension(self.extension_name)
+
+
 def list_fields(fc):
+    """
+    Returns the field names in a feature class or table.
+
+    """
     return [f.name for f in arcpy.ListFields(fc)]
+
+
+def copy_oids(fc, fld_name):
+    """
+    Copies the OID values into a new field.
+
+    """
+    oid_fld = arcpy.Describe(fc).OIDFieldName
+    arcpy.AddField_management(fc, fld_name, 'LONG')
+    arcpy.CalculateField_management(
+        fc, fld_name, '!{}!'.format(oid_fld), 'PYTHON_9.3')
 
 
 def create_layer(layer_name, table, flds=None, where=None, shp_prefix=None):
