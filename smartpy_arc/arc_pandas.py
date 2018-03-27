@@ -58,56 +58,56 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
             NOT support views with fields that have been re-named.
 
     """
-    # update the workspace
-    arcpy.env.workspace = workspace_path
 
-    # define valid field types and null replacement values
-    valid_field_types = {
-        "OID": -1,
-        "Double": -1,
-        "Integer": -1,
-        "Single": -1,
-        "SmallInteger": -1,
-        "String": "",
-        "Date": '1678-01-01'
-    }
+    with TempWork(workspace_path):
 
-    # get valid fields based on their type, assign null replacement values
-    fld_names = []
-    null_dict = {}
+        # define valid field types and null replacement values
+        valid_field_types = {
+            "OID": -1,
+            "Double": -1,
+            "Integer": -1,
+            "Single": -1,
+            "SmallInteger": -1,
+            "String": "",
+            "Date": '1678-01-01'
+        }
 
-    for fld in arcpy.ListFields(class_name):
-        if flds is None or fld.name in flds:
-            if fld.type in valid_field_types and fld.name:
-                fld_names.append(str(fld.name))
-                null_dict[str(fld.name)] = valid_field_types[str(fld.type)]
+        # get valid fields based on their type, assign null replacement values
+        fld_names = []
+        null_dict = {}
 
-    # add geometry properties
-    desc = arcpy.Describe(class_name)
-    if desc.dataType in ["FeatureClass", "FeatureLayer"] and spatial:
-        fld_names.append("SHAPE@X")
-        fld_names.append("SHAPE@Y")
+        for fld in arcpy.ListFields(class_name):
+            if flds is None or fld.name in flds:
+                if fld.type in valid_field_types and fld.name:
+                    fld_names.append(str(fld.name))
+                    null_dict[str(fld.name)] = valid_field_types[str(fld.type)]
 
-        if desc.shapeType == "Polygon":
-            fld_names.append("SHAPE@AREA")
+        # add geometry properties
+        desc = arcpy.Describe(class_name)
+        if desc.dataType in ["FeatureClass", "FeatureLayer"] and spatial:
+            fld_names.append("SHAPE@X")
+            fld_names.append("SHAPE@Y")
 
-        if desc.shapeType == "Polygon" or desc.shapeType == "Polyline":
-            fld_names.append("SHAPE@LENGTH")
+            if desc.shapeType == "Polygon":
+                fld_names.append("SHAPE@AREA")
 
-    # convert feature attributes to numpy array (structured array)
-    if where is None:
-        arr = arcpy.da.TableToNumPyArray(class_name, fld_names, null_value=null_dict)
-    else:
-        arr = arcpy.da.TableToNumPyArray(
-            class_name, fld_names, where_clause=where, null_value=null_dict)
+            if desc.shapeType == "Polygon" or desc.shapeType == "Polyline":
+                fld_names.append("SHAPE@LENGTH")
 
-    # convert the structured array to a pandas data frame
-    df = pd.DataFrame(arr)
+        # convert feature attributes to numpy array (structured array)
+        if where is None:
+            arr = arcpy.da.TableToNumPyArray(class_name, fld_names, null_value=null_dict)
+        else:
+            arr = arcpy.da.TableToNumPyArray(
+                class_name, fld_names, where_clause=where, null_value=null_dict)
 
-    # set the index if provided
-    if index_fld is not None:
-        df.set_index(index_fld, inplace=True)
-        df.sort_index(inplace=True)
+        # convert the structured array to a pandas data frame
+        df = pd.DataFrame(arr)
+
+        # set the index if provided
+        if index_fld is not None:
+            df.set_index(index_fld, inplace=True)
+            df.sort_index(inplace=True)
 
     return df
 
