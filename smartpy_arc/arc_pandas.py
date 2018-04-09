@@ -40,7 +40,7 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         Name of field to serve as pandas index. If not provided
         an auto-generated index will be used. The index does not need
         to be unique.
-    flds: string, optional, default None
+    flds: list or dict of string, optional, default None
         List of fields to include in the data frame. If not provided all
         fields w/ valid types will be imported. Valid field types are
         double, single (float), integer (long), small integer(short)
@@ -73,6 +73,12 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         }
 
         # get valid fields based on their type, assign null replacement values
+        rename_dict = None
+        if flds:
+            if isinstance(flds, dict):
+                rename_dict = flds
+                flds = flds.keys()
+
         fld_names = []
         null_dict = {}
 
@@ -103,6 +109,10 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
 
         # convert the structured array to a pandas data frame
         df = pd.DataFrame(arr)
+
+        # rename columns
+        if rename_dict:
+            df.rename(columns=rename_dict, inplace=True)
 
         # set the index if provided
         if index_fld is not None:
