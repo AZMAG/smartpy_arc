@@ -44,6 +44,23 @@ class TempWork():
         arcpy.env.workspace = self.old_workspace
 
 
+class TempOverwrite():
+    """
+    Context manager for temporarily changing the arcpy ovewrite state.
+
+    """
+
+    def __init__(self, overwrite=True):
+        self.overwrite = overwrite
+
+    def __enter__(self):
+        self.old_state = arcpy.env.overwriteOutput
+        arcpy.env.overwriteOutput = self.overwrite
+
+    def __exit__(self, *args):
+        arcpy.env.overwriteOutput = self.old_state
+
+
 class CheckoutExtension():
     """
     Context manager for temporarily checking out an ArcGIS extension.
@@ -167,3 +184,39 @@ def create_new_feature_class(in_fc, out_fc, flds=None, where=None, shp_prefix=No
     for f in arcpy.ListFields(out_fc):
         if f.name != f.aliasName:
             arcpy.AlterField_management(out_fc, f.name, new_field_alias=f.name)
+
+
+def get_db_conn(server, database):
+    """
+    Creates a sde connection in the scratch folder and returns the path
+    to `.sde` file.
+
+    Assumes OSA, and a SQL Server database.
+
+    Parameters:
+    ------------
+    server: str
+        Database server/instance
+    database: str
+        Name of the database
+
+    Returns:
+    --------
+    string with full path to the `.sde` file
+
+    """
+    scratch_work = arcpy.env.scratchFolder
+    conn_name = 'temp__{}_{}'.format(server, database)
+    conn_path = '{}//{}.sde'.format(scratch_work, conn_name)
+
+    with TempOverwrite():
+        arcpy.CreateDatabaseConnection_management(
+            scratch_work,
+            conn_name,
+            database_platform='SQL_SERVER',
+            instance=server,
+            account_authentication='OPERATING_SYSTEM_AUTH',
+            database=database
+        )
+
+    return conn_path
