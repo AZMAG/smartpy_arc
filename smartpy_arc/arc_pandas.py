@@ -26,9 +26,14 @@ import arcpy
 from .arc_utils import *
 
 
-def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial=True, where=None):
+def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial=True, where=None,
+                  fill_nulls=True, str_fill='', num_fill=-1, date_fill='1678-01-01'):
     """
     Used to import an ArcGIS data class into a pandas data frame.
+
+    TODO: the defaults for filling null values are supplied to support previous workflows.
+    Going forward it may make sense to update some of these and probably make np.nans
+    the default.
 
     Parameters:
     ----------
@@ -48,6 +53,15 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         be converted to -1 for all numeric types and empty string for text.
     spatial: bool, default True
         If True, adds the applicable derived spatial columns.
+    fill_nulls: bool, default True
+        If True, null values will be filled, if False, they will np.nan
+    str_fill: str, default ''
+        Value to fill nulls in string/text columns.
+    num_fill: int, default -1
+        Value to fill nulls in numeric columns.
+    date_fill: str, default '1678-01-01'
+        Value to fill date/time columns.
+
     Returns
     -------
     pandas.DataFrame
@@ -63,13 +77,13 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
 
         # define valid field types and null replacement values
         valid_field_types = {
-            "OID": -1,
-            "Double": -1,
-            "Integer": -1,
-            "Single": -1,
-            "SmallInteger": -1,
-            "String": "",
-            "Date": '1678-01-01'
+            "OID": num_fill,
+            "Double": num_fill,
+            "Integer": num_fill,
+            "Single": num_fill,
+            "SmallInteger": num_fill,
+            "String": str_fill,
+            "Date": date_fill
         }
 
         # get valid fields based on their type, assign null replacement values
@@ -118,6 +132,12 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         if index_fld is not None:
             df.set_index(index_fld, inplace=True)
             df.sort_index(inplace=True)
+
+        # set nulls back if desired
+        # TODO: look possible make this the defaualt and
+        # use more distinct null values
+        if not fill_nulls:
+            df.replace([num_fill, str_fill, date_fill, 'nan'], np.nan, inplace=True)
 
     return df
 
@@ -198,6 +218,10 @@ def pandas_to_arc(df,
                   srs=None):
     """
     Used to export a pandas data frame to an ArcGIS table.
+
+    TODO: if an integer column has nulls convert it to float
+    1st, otherwise the column gets converted to text with
+    'np.nan' in the null cells.
 
     Parameters:
     ----------
