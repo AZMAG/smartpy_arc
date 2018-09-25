@@ -186,7 +186,7 @@ def create_new_feature_class(in_fc, out_fc, flds=None, where=None, shp_prefix=No
             arcpy.AlterField_management(out_fc, f.name, new_field_alias=f.name)
 
 
-def get_db_conn(server, database):
+def get_db_conn(server, database, version='sde.DEFAULT'):
     """
     Creates a sde connection in the scratch folder and returns the path
     to `.sde` file.
@@ -216,7 +216,8 @@ def get_db_conn(server, database):
             database_platform='SQL_SERVER',
             instance=server,
             account_authentication='OPERATING_SYSTEM_AUTH',
-            database=database
+            database=database,
+            version=version
         )
 
     return conn_path
