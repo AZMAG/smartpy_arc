@@ -19,6 +19,9 @@ Expected workspaces:
 - Database: full path .sde file
 
 """
+
+from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
 import arcpy
@@ -167,7 +170,8 @@ def pandas_to_array(df, keep_index=True, cols=None):
         df = df.reset_index()
 
     # put the pandas series into a dictionary of arrays
-    arr_values = {}
+    #arr_values = {}
+    arr_values = OrderedDict()
     arr_dtypes = []
 
     # use all columns if none provided
