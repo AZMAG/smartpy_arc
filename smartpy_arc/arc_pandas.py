@@ -344,7 +344,9 @@ def pandas_join_to_arc(df,
     # create the output
     if output:
         if arc_cols:
-            arc_cols = list(set(arc_cols + [arc_on]))
+            # arc_cols = list(set(arc_cols + [arc_on]))
+            if arc_on not in arc_cols:
+                arc_cols.append(arc_on)
         create_new_feature_class(join_to, output, flds=arc_cols)
     else:
         output = join_to
