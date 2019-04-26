@@ -358,3 +358,30 @@ def pandas_join_to_arc(df,
         s_arr,
         pandas_on
     )
+
+
+def pandas_to_polys(df, poly_fc, pd_id_fld, arc_id_fld, out_fc, reindex=False):
+    """
+    In progres. Another potential way to export out pandas recordsand join them
+    to a feature class.
+
+    TODO: export out to the scratch workspace and build indexes -- for bigger datasets?
+
+    TODO: give option on whether to keep common or all, if all, potentially reindex and
+    fillnulls first?
+
+    """
+    pandas_to_arc(df, 'in_memory', '__temp_export', overwrite=True)
+    create_layer('__temp_polys', poly_fc)
+    arcpy.AddJoin_management(
+        '__temp_polys',
+        arc_id_fld,
+        'in_memory//__temp_export',
+        pd_id_fld,
+        'KEEP_COMMON'
+    )
+    arcpy.CopyFeatures_management('__temp_polys', out_fc)
+    arcpy.Delete_management('__temp_polys')
+    arcpy.Delete_management('in_memory//__temp_export')
+
+
