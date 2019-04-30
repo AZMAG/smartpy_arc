@@ -19,7 +19,7 @@ Expected workspaces:
 - Database: full path .sde file
 
 """
-
+import os
 from collections import OrderedDict
 
 import numpy as np
@@ -360,28 +360,44 @@ def pandas_join_to_arc(df,
     )
 
 
-def pandas_to_polys(df, poly_fc, pd_id_fld, arc_id_fld, out_fc, reindex=False):
+def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
     """
-    In progres. Another potential way to export out pandas recordsand join them
-    to a feature class.
+    Exports a pandas data frame and join it to an existing
+    feature class or table. Intended for larger datasts.
 
-    TODO: export out to the scratch workspace and build indexes -- for bigger datasets?
-
-    TODO: give option on whether to keep common or all, if all, potentially reindex and
-    fillnulls first?
+    Parameters:
+    ----------
+    df: pandas.DataFrame
+        Data frame to export.
+    fc: str
+        Full path to feature class or layer to join to.
+    pd_id_fld: str
+        Name of field in data frame to join on.
+    arc_id_fld: str
+        Name of field in feature class to join on.
+    out_fc: str
+        Full path to the output feature class.
 
     """
-    pandas_to_arc(df, 'in_memory', '__temp_export', overwrite=True)
-    create_layer('__temp_polys', poly_fc)
+
+    # output the pandas table to a scratch workspace and add an attribute index
+    temp_out = '{}//{}'.format(arcpy.env.scratchGDB, '___pandas_out')
+    pandas_to_arc(df, os.path.dirname(temp_out), os.path.basename(temp_out), overwrite=True)
+    arcpy.AddIndex_management(temp_out, pd_id_fld, pd_id_fld)
+
+    # do the join and export
+    create_layer('__temp_polys', fc)
     arcpy.AddJoin_management(
         '__temp_polys',
         arc_id_fld,
-        'in_memory//__temp_export',
+        temp_out,
         pd_id_fld,
-        'KEEP_COMMON'
+        'KEEP_COMMON'  # do we want to make this an input argument?
     )
-    arcpy.CopyFeatures_management('__temp_polys', out_fc)
+    with TempQualifiedFields(False):
+        arcpy.CopyFeatures_management('__temp_polys', out_fc)
+
+    # tidy up
+    arcpy.Delete_management(temp_out)
     arcpy.Delete_management('__temp_polys')
     arcpy.Delete_management('in_memory//__temp_export')
-
-

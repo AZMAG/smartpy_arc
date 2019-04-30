@@ -61,6 +61,23 @@ class TempOverwrite():
         arcpy.env.overwriteOutput = self.old_state
 
 
+class TempQualifiedFields():
+    """
+    Context manager for temporarily changing the qualified field names argument
+
+    """
+
+    def __init__(self, qualified=False):
+        self.qualified = qualified
+
+    def __enter__(self):
+        self.old_state = arcpy.env.qualifiedFieldNames
+        arcpy.env.qualifiedFieldNames = self.qualified
+
+    def __exit__(self, *args):
+        arcpy.env.qualifiedFieldNames = self.old_state
+
+
 class CheckoutExtension():
     """
     Context manager for temporarily checking out an ArcGIS extension.
@@ -182,7 +199,8 @@ def create_new_feature_class(in_fc, out_fc, flds=None, where=None, shp_prefix=No
 
     # at 10.3 field aliases persist, so set these to match the field name
     for f in arcpy.ListFields(out_fc):
-        if f.name != f.aliasName:
+        if f.name != f.aliasName and f.type != 'Geometry':
+            print f.name
             arcpy.AlterField_management(out_fc, f.name, new_field_alias=f.name)
 
 
