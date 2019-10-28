@@ -30,7 +30,7 @@ from .arc_utils import *
 
 
 def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial=True, where=None,
-                  fill_nulls=True, str_fill='', num_fill=-1, date_fill='1678-01-01'):
+                  fill_nulls=True, str_fill='', num_fill=-1, date_fill='1678-01-01 00:00:00'):
     """
     Used to import an ArcGIS data class into a pandas data frame.
 
@@ -62,7 +62,7 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         Value to fill nulls in string/text columns.
     num_fill: int, default -1
         Value to fill nulls in numeric columns.
-    date_fill: str, default '1678-01-01'
+    date_fill: str, default '1678-01-01 00:00:00'
         Value to fill date/time columns.
 
     Returns
@@ -137,11 +137,11 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
             df.sort_index(inplace=True)
 
         # set nulls back if desired
-        # TODO: look possible make this the defaualt and
+        # TODO: look possible make this the default and
         # use more distinct null values
         if not fill_nulls:
-            df.replace([num_fill, str_fill, date_fill, 'nan'], np.nan, inplace=True)
-
+            df.replace([num_fill, str_fill, 'nan'], np.nan, inplace=True)
+            df = df.astype(str).replace(date_fill, np.nan)
     return df
 
 
