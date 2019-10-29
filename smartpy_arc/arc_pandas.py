@@ -3,15 +3,16 @@ Use this module to integrate ArcGIS data objects
 with pandas.
 
 Dependencies & caveats:
-- Written and tested w/ ArcGIS 10.2.1 (build 3497)
-- Must have ArcGIS desktop 64 bit background geoprocessing installed
-- Not intended to run w/in the default ArcGIS python distribution, instead
-    run w/in a scientific distribution like winpython or anaconda
-- Must have the following in the python path of the distribution:
-    - path to ArcGIS 64 bit bin:
-        C:\Program Files (x86)\ArcGIS\Desktop10.2\bin64
-    - path to arcpy:
-        C:\Program Files (x86)\ArcGIS\Desktop10.2\arcpy
+- py27:
+    - ArcGIS desktop 64 bit background geoprocessing installed
+    - If not using the ArcGIS python distribution, must have the following in the
+      python path of the distribution:
+        C:\Program Files (x86)\ArcGIS\Desktop10.7\bin64
+        C:\Program Files (x86)\ArcGIS\Desktop10.7\arcpy
+- py36:
+    - ArcGIS Pro
+    - Must be working w/in the pro conda environment (or a clone)
+
 
 Expected workspaces:
 - Shapefile and dbase table: full path to folder location
@@ -189,7 +190,7 @@ def pandas_to_array(df, keep_index=True, cols=None):
 
         # convert types to make ArcGIS happy
         if arr.dtype == np.object:
-            arr = arr.astype(unicode)
+            arr = arr.astype(str)
         if arr.dtype == np.int64:
             max_val = arr.max()
             min_val = arr.min()
