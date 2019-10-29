@@ -140,7 +140,10 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
         # TODO: look possible make this the defaualt and
         # use more distinct null values
         if not fill_nulls:
-            df.replace([num_fill, str_fill, date_fill, 'nan'], np.nan, inplace=True)
+            # note: need separate calls or it seems to change data types
+            df.replace(num_fill, np.nan, inplace=True)
+            df.replace([str_fill, 'nan'], np.nan, inplace=True)
+            df.replace(pd.Timestamp(date_fill), np.nan, inplace=True)
 
     return df
 
