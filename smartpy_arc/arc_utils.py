@@ -195,13 +195,56 @@ def create_new_feature_class(in_fc, out_fc, flds=None, where=None, shp_prefix=No
     """
     create_layer('__killme', in_fc, flds, where, shp_prefix)
     arcpy.CopyFeatures_management('__killme', out_fc)
-    arcpy.Delete_management('__killme')
+    # look into this?, for some reason arcpro cant get a schema lock?
+    # arcpy.Delete_management('__killme')
 
     # at 10.3 field aliases persist, so set these to match the field name
     for f in arcpy.ListFields(out_fc):
         if f.name != f.aliasName and f.type != 'Geometry':
-            print f.name
             arcpy.AlterField_management(out_fc, f.name, new_field_alias=f.name)
+
+
+def get_field_map(src, flds):
+    """
+    Returns a field map from a list or dictionary.
+
+    """
+
+    mappings = arcpy.FieldMappings()
+    if isinstance(flds, list):
+        flds = {n: n for n in flds}
+
+    for old_name, new_name in flds.items():
+        fm = arcpy.FieldMap()
+        fm.addInputField(src, old_name)
+        out_f = fm.outputField
+        out_f.name = new_name
+        out_f.aliasName = new_name
+        fm.outputField = out_f
+        fm.outputField.name = new_name
+        mappings.addFieldMap(fm)
+
+    return mappings
+
+
+def create_new_feature_class2(in_fc, out_gdb, out_fc, flds=None, where=None):
+    """
+    Note in ArcPro (and thus py36), we can no longer change fields in
+    a feature layer, we have to do this via feature class conversion. Use this
+    method to do so.
+
+    """
+    field_map = None
+    if flds is not None:
+        field_map = get_field_map(in_fc, flds)
+
+    arcpy.FeatureClassToFeatureClass_conversion(
+        in_fc,
+        out_gdb,
+        out_fc,
+        where,
+        field_map
+    )
 
 
 def get_db_conn(server, database, version='sde.DEFAULT'):
