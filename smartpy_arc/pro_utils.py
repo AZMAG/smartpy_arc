@@ -95,7 +95,7 @@ def get_table(name, aprx_name='CURRENT', map_name=None):
 def get_df(name, aprx_name='CURRENT', map_name=None, **kwargs):
     """
     Fetches a layer or stand-alone table from the active map and
-    returns a pandas.DataFrame, layers and stand-alone table names
+    returns a pandas.DataFrame.
 
     Notes:
     ------
