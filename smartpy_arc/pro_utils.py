@@ -128,3 +128,85 @@ def get_df(name, aprx_name='CURRENT', map_name=None, **kwargs):
     if len(items) > 1:
         raise ValueError('{} is not a unique name'.format(name))
     return arc_to_pandas('', items[0], **kwargs)
+
+
+def get_field_map(src, flds):
+    """
+    Returns a field map for an arcpy data itme from a list or dictionary.
+    Useful for operations such as renaming columns merging feature classes.
+
+    Parameters:
+    -----------
+    src: str, arcpy data item or arcpy.mp layer or table
+        Source data item containing the desired fields.
+    flds: dict <str: str>
+        Mapping between old (keys) and new field names (values).
+
+    Returns:
+    --------
+    arcpy.FieldMappings
+
+    """
+
+    mappings = arcpy.FieldMappings()
+    if isinstance(flds, list):
+        flds = {n: n for n in flds}
+
+    for old_name, new_name in flds.items():
+        fm = arcpy.FieldMap()
+        fm.addInputField(src, old_name)
+        out_f = fm.outputField
+        out_f.name = new_name
+        out_f.aliasName = new_name
+        fm.outputField = out_f
+        fm.outputField.name = new_name
+        mappings.addFieldMap(fm)
+
+    return mappings
+
+
+def copy_feats(data, out_work, out_fc, flds=None, where=None):
+    """
+    Copies features into a new feature class.
+
+    Parameters:
+    -----------
+    data: str or feature layer
+        Data to copy out. If the data is a layer will respect
+        defintion query and/or selection set.
+    out_work: str
+        Output workspace to top to.
+    out_fc: str
+        Name of the new feature class.
+    flds: list or dict <str: str>, optional default None
+        Fields to copy. If dict is provided fields will
+        be-renamed.
+    where: str, optional default None
+        Optional query to apply.
+
+    Returns:
+    -------
+    str of full path to the created feature class.
+
+    TODO:
+    -----
+    When working w/in pro, seems to put in aprx.defaultGeodatabse
+    when specifying in_memory as the output workspace, also will
+    rename the feauture class if it already exists, not sure how
+    to overwrite. If running outside ArcPro then behavior is as
+    expected.
+
+    """
+    print ('hola')
+
+    field_map = None
+    if flds is not None:
+        field_map = get_field_map(data, flds)
+
+    return arcpy.FeatureClassToFeatureClass_conversion(
+        data,
+        out_work,
+        out_fc,
+        where,
+        field_map
+    )
