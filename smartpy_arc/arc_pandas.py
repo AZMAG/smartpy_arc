@@ -248,7 +248,7 @@ def pandas_to_arc(df,
     ----------
     df: pandas.DataFrame
         Data frame to export.
-     workspace_path: string
+    workspace_path: string
         Full path to ArcGIS workspace location.
     output_table: string
         name of the output table.
@@ -280,38 +280,36 @@ def pandas_to_arc(df,
     s_arr = pandas_to_array(df, keep_index, cols)
 
     # now export to arc
-    old_workspace = arcpy.env.workspace
-    arcpy.env.workspace = workspace_path
+    with TempWork(workspace_path):
 
-    if overwrite:
-        # delete existing table it if it exists
-        if output_table in arcpy.ListTables() + arcpy.ListFeatureClasses():
-            arcpy.Delete_management(output_table)
+        if overwrite:
+            if arcpy.Exists(output_table):
+                arcpy.Delete_management(output_table)
 
-    # convert the array to a ArcGIS table or feature class
-    out_path = '{}/{}'.format(workspace_path, output_table)
-    if x_col is not None and y_col is not None:
-        arcpy.da.NumPyArrayToFeatureClass(
-            s_arr, out_path, [x_col, y_col], srs)
-    else:
-        arcpy.da.NumPyArrayToTable(s_arr, out_path)
+        # convert the array to a ArcGIS table or feature class
+        # note: these numpy gp tools have pretty specific path requirement
+        out_path = '{}/{}'.format(workspace_path, output_table)
+        if x_col is not None and y_col is not None:
+            arcpy.da.NumPyArrayToFeatureClass(
+                s_arr, out_path, [x_col, y_col], srs)
+        else:
+            arcpy.da.NumPyArrayToTable(s_arr, out_path)
 
-    # return a cursor with the results
-    if get_cursor:
-        fld_names = []
-        out_flds = {}
-        fld_idx = 0
-        for curr_fld in arcpy.ListFields(output_table):
-            fld_names.append(curr_fld.name)
-            out_flds[curr_fld.name] = fld_idx
-            fld_idx += 1
-        rows = arcpy.da.SearchCursor(output_table, fld_names)
-    else:
-        out_flds = None
-        rows = None
+        # id desired, return a cursor with the results
+        if get_cursor:
+            fld_names = []
+            out_flds = {}
+            fld_idx = 0
+            for curr_fld in arcpy.ListFields(output_table):
+                fld_names.append(curr_fld.name)
+                out_flds[curr_fld.name] = fld_idx
+                fld_idx += 1
+            rows = arcpy.da.SearchCursor(output_table, fld_names)
+        else:
+            out_flds = None
+            rows = None
 
     # return the results
-    arcpy.env.workspace = old_workspace
     return out_flds, rows
 
 
