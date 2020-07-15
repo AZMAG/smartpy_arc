@@ -147,7 +147,6 @@ def get_field_map(src, flds):
     arcpy.FieldMappings
 
     """
-
     mappings = arcpy.FieldMappings()
     if isinstance(flds, list):
         flds = {n: n for n in flds}
@@ -197,8 +196,6 @@ def copy_feats(data, out_work, out_fc, flds=None, where=None):
     expected.
 
     """
-    print ('hola')
-
     field_map = None
     if flds is not None:
         field_map = get_field_map(data, flds)
@@ -210,3 +207,144 @@ def copy_feats(data, out_work, out_fc, flds=None, where=None):
         where,
         field_map
     )
+
+
+def row_count(data):
+    """
+    Return the # of rows/features in the provided data (feature class,
+    table, feature layer or table view)
+
+    """
+    return int(arcpy.GetCount_management(data).getOutput(0))
+
+
+def list_flds(data):
+    """
+    Short hand for listing the field names in a featue class
+    or table.
+
+    """
+    return [f.name for f in arcpy.ListFields(data)]
+
+
+class TempWork():
+    """
+    Context manager for temporarily changing workspaces. Use this
+    for cases where you temporarily want to change the workspace
+    within a function and then have it revert back to the original
+    workspace upon exiting.
+
+    For example:
+
+    with TempWork(r'c:\temp') as work:
+        print arcpy.ListFeeatureClasses()
+
+    Will print the tables in the provided workspace and then
+    set the worksapce back when done.
+
+    """
+
+    def __init__(self, workspace=None):
+        self.workspace = workspace
+
+    def __enter__(self):
+        self.old_workspace = arcpy.env.workspace
+        arcpy.env.workspace = self.workspace
+
+    def __exit__(self, *args):
+        arcpy.env.workspace = self.old_workspace
+
+
+class TempOverwrite():
+    """
+    Context manager for temporarily changing the arcpy ovewrite state.
+
+    """
+
+    def __init__(self, overwrite=True):
+        self.overwrite = overwrite
+
+    def __enter__(self):
+        self.old_state = arcpy.env.overwriteOutput
+        arcpy.env.overwriteOutput = self.overwrite
+
+    def __exit__(self, *args):
+        arcpy.env.overwriteOutput = self.old_state
+
+
+class TempQualifiedFields():
+    """
+    Context manager for temporarily changing the qualified field names argument
+
+    """
+
+    def __init__(self, qualified=False):
+        self.qualified = qualified
+
+    def __enter__(self):
+        self.old_state = arcpy.env.qualifiedFieldNames
+        arcpy.env.qualifiedFieldNames = self.qualified
+
+    def __exit__(self, *args):
+        arcpy.env.qualifiedFieldNames = self.old_state
+
+
+class CheckoutExtension():
+    """
+    Context manager for temporarily checking out an ArcGIS extension.
+    Will checkout the extension and then check it back in after
+    the code is executed.
+
+    For example:
+
+    with CheckoutExtension('spatial') as ce:
+        # generate the density surface
+        kd = KernelDensity('pnts', None, kd_resolution, kd_resolution, "SQUARE_MILES")
+
+    """
+
+    def __init__(self, name):
+        self.extension_name = name
+
+    def __enter__(self):
+        arcpy.CheckOutExtension(self.extension_name)
+
+    def __exit__(self, *args):
+        arcpy.CheckInExtension(self.extension_name)
+
+
+def get_db_conn(server, database, version='sde.DEFAULT'):
+    """
+    Creates a sde connection in the scratch folder and returns the path
+    to `.sde` file.
+
+    Assumes OSA, and a SQL Server database.
+
+    Parameters:
+    ------------
+    server: str
+        Database server/instance
+    database: str
+        Name of the database
+
+    Returns:
+    --------
+    string with full path to the `.sde` file
+
+    """
+    scratch_work = arcpy.env.scratchFolder
+    conn_name = 'temp__{}_{}'.format(server, database)
+    conn_path = '{}//{}.sde'.format(scratch_work, conn_name)
+
+    with TempOverwrite():
+        arcpy.CreateDatabaseConnection_management(
+            scratch_work,
+            conn_name,
+            database_platform='SQL_SERVER',
+            instance=server,
+            account_authentication='OPERATING_SYSTEM_AUTH',
+            database=database,
+            version=version
+        )
+
+    return conn_path
