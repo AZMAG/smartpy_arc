@@ -396,23 +396,31 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
     """
 
     # output the pandas table to a scratch workspace and add an attribute index
-    temp_out = '{}//{}'.format(arcpy.env.scratchGDB, '___pandas_out')
-    pandas_to_arc(df, os.path.dirname(temp_out), os.path.basename(temp_out), overwrite=True)
-    arcpy.AddIndex_management(temp_out, pd_id_fld, pd_id_fld)
+    scratch = arcpy.env.scratchGDB
 
-    # do the join and export
-    create_layer('__temp_polys', fc)
-    arcpy.AddJoin_management(
-        '__temp_polys',
-        arc_id_fld,
-        temp_out,
-        pd_id_fld,
-        'KEEP_COMMON'  # do we want to make this an input argument?
-    )
-    with TempQualifiedFields(False):
-        arcpy.CopyFeatures_management('__temp_polys', out_fc)
+    with TempWork(scratch):
 
-    # tidy up
-    arcpy.Delete_management(temp_out)
-    arcpy.Delete_management('__temp_polys')
-    arcpy.Delete_management('in_memory//__temp_export')
+
+        temp_pd_name = '__pd_temp'
+        temp_arc_name = '__polys_temp'
+
+        # output the pandas table to a scratch workspace and add an attribute index
+        pandas_to_arc(df, scratch, temp_pd_name, overwrite=True)
+        arcpy.AddIndex_management(temp_pd_name, pd_id_fld, pd_id_fld)
+
+        # do the join and export
+        create_layer(temp_arc_name, fc)
+
+        arcpy.AddJoin_management(
+            temp_arc_name,
+            arc_id_fld,
+            temp_pd_name,
+            pd_id_fld,
+            'KEEP_COMMON'  # do we want to make this an input argument?
+        )
+        with TempQualifiedFields(False):
+            arcpy.CopyFeatures_management(temp_arc_name, out_fc)
+
+        # tidy up
+        arcpy.Delete_management(temp_pd_name)
+        arcpy.Delete_management(temp_arc_name)
