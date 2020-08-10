@@ -4,10 +4,50 @@ libraries. Eventually start to deprecate the
 arc_pandas and arc_utils libraties in lieu of this.
 
 """
-
+import os
+import random
 import arcpy
 import pandas as pd
 from .arc_pandas import *
+
+
+def get_aprx(aprx_name='CURRENT'):
+    """
+    Return a project reference. By default
+    this is the current map.
+
+    Parameters:
+    -----------
+    aprx_name: str, optional, default 'CURRENT'
+        Full path to the aprx. If not provided,
+        uses the currently open project.
+
+    Returns:
+    --------
+    arcpy.mp.ArcGISProject
+
+    """
+    return arcpy.mp.ArcGISProject(aprx_name)
+
+
+def default_gdb(aprx=None):
+    """
+    Shorthand for getting the default geodatabase path.
+
+    Parameters:
+    ----------
+    aprx: arcpy.mp.ArcGISProject, optional, default None
+        If None, use the active project.
+
+    Returns:
+    --------
+    str
+
+    """
+    if aprx is None:
+        aprx = get_aprx()
+
+    return aprx.defaultGeodatabase
 
 
 def get_map(aprx_name='CURRENT', map_name=None):
@@ -348,3 +388,207 @@ def get_db_conn(server, database, version='sde.DEFAULT'):
         )
 
     return conn_path
+
+
+class ScratchGdb():
+    """
+    Context manager for dealing w/ temporary file geodatabase
+    files. Given a `with` session, creates the gdb. When leaving
+    the session the gdb will be deleted.
+
+    Can also be used outside of `with`, use `del` on an instance
+    to clear out the geodatabase.
+
+    Doing this for a couple of reasons:
+
+        1 - ArcPro does weird stuff with the in_memory
+        workspace, also the in_memory workspace doesnt work
+        with some tools.
+
+        2 - ArcPro does weird stuff with scratch file gdb
+        (like rndomly deletes it)
+
+        3 - There are sometimes locking issues when trying
+        to write to the same gdb when multiple notebooks are open.
+
+
+    Example usage:
+    --------------
+    # example 1: as a context manager
+    with ScratchGdb() as scratch:
+        out_file = arcpy.CopyFeats(some_fc, scratch.path, 'some_fc_copy')
+
+    # example 2: stand-alone
+    scratch = ScratchGdb()
+    out_file = arcpy.CopyFeats(some_fc, scratch.path, 'some_fc_copy')
+    del scratch
+
+    """
+
+    # scratch workspace/folder location
+    scratch_folder = arcpy.env.scratchFolder
+
+    # prefix assigned to all scratch geodatabaes
+    gdb_prefix = '__scratch__killme_'
+
+    def __init__(self):
+        """
+        Create a new file gdb in the ArcGIS scratch folder. Should
+        have a unique name.
+
+        """
+        work = ScratchGdb.scratch_folder
+        existing = [f for f in os.listdir(work) if f.endswith('.gdb')]
+        while True:
+            gdb_name = '{}{}.gdb'.format(ScratchGdb.gdb_prefix, random.randint(0, 1000))
+            if gdb_name not in existing:
+                break
+
+        arcpy.CreateFileGDB_management(work, gdb_name)
+        self._name = gdb_name
+        self._folder = work
+        self._path = '{}\\{}'.format(work, gdb_name)
+
+    @property
+    def name(self):
+        """
+        Name of the scratch geodatabase.
+
+        """
+        return self._name
+
+    @property
+    def folder(self):
+        """
+        Name of the folder the scratch geodatabase
+        resides in.
+
+        """
+        return self._folder
+
+    @property
+    def path(self):
+        """
+        Full path to the scratch geodatabase.
+
+        """
+        return self._path
+
+    def clear(self):
+        """
+        Remove the temporary gdb. Produce a warning if the gdb
+        could not be deleted (usually because it's locked).
+
+        TODO: look into removing the .lock files?
+
+        """
+        try:
+            arcpy.Delete_management(self._path)
+        except:
+            # this seems to be raised in th context manager
+            # even when there is no issue deleting?
+            # so for now just continue, use list_gdbs and clear_gdbs
+            #     methods to clean up remaining stuff later
+            #raise Warning(
+            #    'Could not remove {} -- check for locks'.format(self._path))
+            a = 1
+
+        self._name = None
+        self._folder = None
+        self._path = None
+
+    def __enter__(self):
+        """
+        Called when entering a `with` block. Just returns
+        a reference to the instance for use w/in the with.
+
+        """
+        return self
+
+    def __exit__(self, *args):
+        """
+        Called when exiting a `with` block. This will
+        attempt to remove any temporary/scratch output.
+
+        """
+        self.clear()
+
+    def __del__(self):
+
+        """
+        Called when using `del` on an instnace. This will
+        attempt to remove any temporary/scratch output.
+
+        """
+        self.clear()
+
+    @classmethod
+    def list_gdbs(cls, full_path=False):
+        """
+        Returns a list of the names of existing scratch gdbs.
+
+        """
+        return [g for g in os.listdir(cls.scratch_folder) if g.startswith(cls.gdb_prefix)]
+
+    @classmethod
+    def clear_gdbs(cls):
+        """
+        Attempt to clear out all existing scratch gdbs. Use this for cases where
+        the gdb couldn't be deleted when in use because of locks or something.
+
+        """
+        for g in cls.list_gdbs():
+            try:
+                arcpy.Delete_management('{}\\{}'.format(cls.scratch_folder, g))
+            except:
+                continue
+
+
+def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
+    """
+    Exports a pandas data frame and join it to an existing
+    feature class or table. Intended for larger datasts.
+
+    Parameters:
+    ----------
+    df: pandas.DataFrame
+        Data frame to export.
+    fc: str
+        Full path to feature class or layer to join to.
+    pd_id_fld: str
+        Name of field in data frame to join on.
+    arc_id_fld: str
+        Name of field in feature class to join on.
+    out_fc: str
+        Full path to the output feature class.
+
+    """
+
+    with ScratchGdb() as scratch:
+
+        with TempWork(scratch.path):
+
+
+            temp_pd_name = '__pd_temp'
+            temp_arc_name = '__polys_temp'
+
+            # output the pandas table to a scratch workspace and add an attribute index
+            pandas_to_arc(df, scratch.path, temp_pd_name, overwrite=True)
+            arcpy.AddIndex_management(temp_pd_name, pd_id_fld, pd_id_fld)
+
+            # do the join and export
+            create_layer(temp_arc_name, fc)
+
+            arcpy.AddJoin_management(
+                temp_arc_name,
+                arc_id_fld,
+                temp_pd_name,
+                pd_id_fld,
+                'KEEP_COMMON'  # do we want to make this an input argument?
+            )
+            with TempQualifiedFields(False):
+                arcpy.CopyFeatures_management(temp_arc_name, out_fc)
+
+            # tidy up
+            arcpy.Delete_management(temp_pd_name)
+            arcpy.Delete_management(temp_arc_name)
