@@ -544,7 +544,7 @@ class ScratchGdb():
                 continue
 
 
-def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
+def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
     """
     Exports a pandas data frame and join it to an existing
     feature class or table. Intended for larger datasts.
@@ -561,6 +561,9 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
         Name of field in feature class to join on.
     out_fc: str
         Full path to the output feature class.
+    keep_common: bool, optional, default True
+        If True, only joined features will be retained.
+        IF False, all features will be retained.
 
     """
 
@@ -579,12 +582,18 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
             # do the join and export
             create_layer(temp_arc_name, fc)
 
+            if keep_common:
+                join_type='KEEP_COMMON'
+            else:
+                join_type='KEEP_ALL'
+
+
             arcpy.AddJoin_management(
                 temp_arc_name,
                 arc_id_fld,
                 temp_pd_name,
                 pd_id_fld,
-                'KEEP_COMMON'  # do we want to make this an input argument?
+                join_type
             )
             with TempQualifiedFields(False):
                 arcpy.CopyFeatures_management(temp_arc_name, out_fc)
