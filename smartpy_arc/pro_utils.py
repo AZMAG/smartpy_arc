@@ -601,3 +601,26 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
             # tidy up
             arcpy.Delete_management(temp_pd_name)
             arcpy.Delete_management(temp_arc_name)
+
+
+def add_ap_ratio(data, fld_name='ap_ratio'):
+    """
+    Adds and calculated an area-perimter ratio field. The ratio is based on
+    comparing the length to that of a circle w/ the same area.
+
+    Parameters:
+    -----------
+    data: str
+        Full path to the feature class (must be polygons).
+    fld_name str, optional, default `ap_ratio`
+        Name for the field to add.
+
+
+    """
+    arcpy.AddField_management(data, fld_name, 'DOUBLE')
+    arcpy.CalculateField_management(
+        data,
+        fld_name,
+        'Length($feature) / (2 * Sqrt(3.14159265 * Area($feature)))',
+        'ARCADE'
+    )
