@@ -603,6 +603,70 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
             arcpy.Delete_management(temp_arc_name)
 
 
+def get_centroids(polys, out_gdb, out_fc, flds_to_keep=None):
+    """
+    Generates centroids, this will be the 'natural' centroid when it falls within 
+    the polygon and a point somewhere inside the polygon if not. For some reason this is way
+    faster than arcpy.management.FeatureToPoint.
+
+    The orignal OID/OBJECTID values will be stored in the column `src_<OBJECTID ID COLUMN NAME>`
+
+    Parameters:
+    -----------
+    polys: str
+        Full path to the feature class.
+    out_gdb: str
+        Full path to the output feature class.
+    out_fc: str
+        Name of the ouput feature class
+    flds_to_keep: str or list of str, default None
+        List of fields to retain in the output.
+        If not provided all columns except Shape related will be retained.
+
+    Returns:
+    --------
+        Full path to the output featuere class.
+
+    """
+    # manage fields
+    d = arcpy.Describe(polys)
+    srs = d.spatialReference
+    shp_col = d.shapeFieldName
+    oid_col = d.oidFieldName
+
+    if flds_to_keep is None:
+        flds_to_keep = [f for f in list_flds(polys) if f not in [shp_col, oid_col, 'Shape_Length', 'Shape_Area']]
+    else:
+        if not isinstance(flds_to_keep, list):
+            flds_to_keep=[flds_to_keep]
+    
+    # get centroids
+    res = {}
+    cursor = arcpy.da.SearchCursor(polys, [oid_col, '{}@'.format(shp_col)] + flds_to_keep)    
+    for feat in cursor:
+        curr_oid = feat[0]
+        curr_shp = feat[1]
+        centroid = curr_shp.centroid
+        res[curr_oid] = [centroid.X, centroid.Y] + list(feat[2:])
+
+    # build the dataframe
+    df = pd.DataFrame.from_dict(res, orient='index', columns=['x', 'y'] + flds_to_keep)
+    df.index.name = 'src_{}'.format(oid_col)
+    for col in df.columns:
+        if str(df[col].dtype) == 'object':
+            df[col].fillna('', inplace=True)
+
+    # send back to arc
+    out = '{}//{}'.format(out_gdb, out_fc)
+    pandas_to_arc(
+        df,
+        out_gdb,
+        out_fc,
+        x_col='x', y_col='y', srs=srs
+    )
+    return out
+
+
 def add_ap_ratio(data, fld_name='ap_ratio'):
     """
     Adds and calculated an area-perimter ratio field. The ratio is based on
