@@ -170,6 +170,14 @@ def get_df(name, aprx_name='CURRENT', map_name=None, **kwargs):
     return arc_to_pandas('', items[0], **kwargs)
 
 
+def get_oid_fld(data):
+    """
+    Returns the name of objectid field.
+
+    """
+    return arcpy.Describe(data).OIDFieldName
+
+
 def get_field_map(src, flds):
     """
     Returns a field map for an arcpy data itme from a list or dictionary.
