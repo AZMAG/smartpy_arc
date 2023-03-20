@@ -77,7 +77,8 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
 
     """
     # build full path to the class/table
-    class_name = '{}//{}'.format(workspace_path, class_name)
+    if workspace_path is not None and workspace_path != '':
+        class_name = '{}//{}'.format(workspace_path, class_name)
 
     # define valid field types and null replacement values
     valid_field_types = {
