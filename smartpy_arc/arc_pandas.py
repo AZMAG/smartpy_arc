@@ -76,88 +76,88 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
             NOT support views with fields that have been re-named.
 
     """
+    # build full path to the class/table
+    class_name = '{}//{}'.format(workspace_path, class_name)
 
-    with TempWork(workspace_path):
+    # define valid field types and null replacement values
+    valid_field_types = {
+        "OID": num_fill,
+        "Double": num_fill,
+        "Integer": num_fill,
+        "Single": num_fill,
+        "SmallInteger": num_fill,
+        "String": str_fill,
+        "Date": date_fill
+    }
 
-        # define valid field types and null replacement values
-        valid_field_types = {
-            "OID": num_fill,
-            "Double": num_fill,
-            "Integer": num_fill,
-            "Single": num_fill,
-            "SmallInteger": num_fill,
-            "String": str_fill,
-            "Date": date_fill
-        }
+    # get valid fields based on their type, assign null replacement values
+    rename_dict = None
+    if flds:
+        if isinstance(flds, dict):
+            rename_dict = flds
+            flds = flds.keys()
 
-        # get valid fields based on their type, assign null replacement values
-        rename_dict = None
-        if flds:
-            if isinstance(flds, dict):
-                rename_dict = flds
-                flds = flds.keys()
+    fld_names = []
+    null_dict = {}
 
-        fld_names = []
-        null_dict = {}
+    for fld in arcpy.ListFields(class_name):
+        if flds is None or fld.name in flds:
+            if fld.type in valid_field_types and fld.name:
+                fld_names.append(str(fld.name))
+                null_dict[str(fld.name)] = valid_field_types[str(fld.type)]
 
-        for fld in arcpy.ListFields(class_name):
-            if flds is None or fld.name in flds:
-                if fld.type in valid_field_types and fld.name:
-                    fld_names.append(str(fld.name))
-                    null_dict[str(fld.name)] = valid_field_types[str(fld.type)]
+    # add geometry properties
+    desc = arcpy.Describe(class_name)
+    if desc.dataType in ["FeatureClass", "FeatureLayer"] and spatial:
+        fld_names.append("SHAPE@X")
+        fld_names.append("SHAPE@Y")
 
-        # add geometry properties
-        desc = arcpy.Describe(class_name)
-        if desc.dataType in ["FeatureClass", "FeatureLayer"] and spatial:
-            fld_names.append("SHAPE@X")
-            fld_names.append("SHAPE@Y")
+        if desc.shapeType == "Polygon":
+            fld_names.append("SHAPE@AREA")
 
-            if desc.shapeType == "Polygon":
-                fld_names.append("SHAPE@AREA")
+        if desc.shapeType == "Polygon" or desc.shapeType == "Polyline":
+            fld_names.append("SHAPE@LENGTH")
 
-            if desc.shapeType == "Polygon" or desc.shapeType == "Polyline":
-                fld_names.append("SHAPE@LENGTH")
+    # convert feature attributes to numpy array (structured array)
+    if where is None:
+        arr = arcpy.da.TableToNumPyArray(class_name, fld_names, null_value=null_dict)
+    else:
+        arr = arcpy.da.TableToNumPyArray(
+            class_name, fld_names, where_clause=where, null_value=null_dict)
 
-        # convert feature attributes to numpy array (structured array)
-        if where is None:
-            arr = arcpy.da.TableToNumPyArray(class_name, fld_names, null_value=null_dict)
-        else:
-            arr = arcpy.da.TableToNumPyArray(
-                class_name, fld_names, where_clause=where, null_value=null_dict)
+    # need to handle bad datetimes
+    # times outside the pandas available range will be
+    # converted to default/null value
+    # TODO: look for a better approach long term
+    arr_flds = arr.dtype.fields
+    date_flds = [k for k, v in arr_flds.items() if v[0] == np.dtype('<M8[us]')]
+    min_date = pd.Timestamp.min
+    max_date = pd.Timestamp.max
+    for f in date_flds:
+        bad = (arr[f] < min_date) | (arr[f] > max_date)
+        if sum(bad) > 0:
+            arr[f][bad] = date_fill
 
-        # need to handle bad datetimes
-        # times outside the pandas available range will be
-        # converted to default/null value
-        # TODO: look for a better approach long term
-        arr_flds = arr.dtype.fields
-        date_flds = [k for k, v in arr_flds.items() if v[0] == np.dtype('<M8[us]')]
-        min_date = pd.Timestamp.min
-        max_date = pd.Timestamp.max
-        for f in date_flds:
-            bad = (arr[f] < min_date) | (arr[f] > max_date)
-            if sum(bad) > 0:
-                arr[f][bad] = date_fill
+    # convert the structured array to a pandas data frame
+    df = pd.DataFrame(arr)
 
-        # convert the structured array to a pandas data frame
-        df = pd.DataFrame(arr)
+    # rename columns
+    if rename_dict:
+        df.rename(columns=rename_dict, inplace=True)
 
-        # rename columns
-        if rename_dict:
-            df.rename(columns=rename_dict, inplace=True)
+    # set the index if provided
+    if index_fld is not None:
+        df.set_index(index_fld, inplace=True)
+        df.sort_index(inplace=True)
 
-        # set the index if provided
-        if index_fld is not None:
-            df.set_index(index_fld, inplace=True)
-            df.sort_index(inplace=True)
-
-        # set nulls back if desired
-        # TODO: look possible make this the defaualt and
-        # use more distinct null values
-        if not fill_nulls:
-            # note: need separate calls or it seems to change data types
-            df.replace(num_fill, np.nan, inplace=True)
-            df.replace([str_fill, 'nan'], np.nan, inplace=True)
-            df.replace(pd.Timestamp(date_fill), np.nan, inplace=True)
+    # set nulls back if desired
+    # TODO: look possible make this the defaualt and
+    # use more distinct null values
+    if not fill_nulls:
+        # note: need separate calls or it seems to change data types
+        df.replace(num_fill, np.nan, inplace=True)
+        df.replace([str_fill, 'nan'], np.nan, inplace=True)
+        df.replace(pd.Timestamp(date_fill), np.nan, inplace=True)
 
     return df
 
@@ -396,7 +396,8 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
     """
 
     # output the pandas table to a scratch workspace and add an attribute index
-    scratch = arcpy.env.scratchGDB
+    # scratch = arcpy.env.scratchGDB
+    scratch = r'D:\scratch\killme.gdb'
 
     with TempWork(scratch):
 
