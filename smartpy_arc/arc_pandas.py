@@ -20,7 +20,6 @@ Expected workspaces:
 - Database: full path .sde file
 
 """
-import os
 from collections import OrderedDict
 
 import numpy as np
@@ -314,69 +313,7 @@ def pandas_to_arc(df,
     return out_flds, rows
 
 
-def pandas_join_to_arc(df,
-                       join_to,
-                       pandas_on,
-                       arc_on,
-                       output=None,
-                       keep_index=True,
-                       pandas_cols=None,
-                       arc_cols=None):
-    """
-    Export a pandas data frame and join it to an existing
-    feature class or table.
-
-    Parameters:
-    ----------
-    df: pandas.DataFrame
-        Data frame to export.
-    join_to: str
-        Full path to feature class, layer or table to join to.
-    pandas_on: str
-        Name of column in pandas data frame to join on.
-    arc_on: str
-        Name of field in arc dataset to join on.
-    output: str, optional, default None
-        Full path to output table or feature class.
-        If not provided, data frame fields will be appended to the existing table.
-    keep_index: bool, optional, default True
-        If True, column(s) will be created from the index.
-    pandas_cols: list <string>, optional, default None:
-        List of fields/columns to include in output, if not provided
-        all fields will be exported. Also, include index names here.
-    arc_cols: list <string>, optional, default None:
-        List of fields/columns to include from the arc dataset. If
-        omitted all columns will be included.
-
-    """
-
-    arcpy.env.qualifiedFieldNames = False
-
-    # convert data frame to structured array
-    if pandas_cols:
-        pandas_cols = list(set(pandas_cols + [pandas_on]))
-    s_arr = pandas_to_array(df, keep_index, pandas_cols)
-
-    # create the output
-    if output:
-        if arc_cols:
-            # arc_cols = list(set(arc_cols + [arc_on]))
-            if arc_on not in arc_cols:
-                arc_cols.append(arc_on)
-        create_new_feature_class(join_to, output, flds=arc_cols)
-    else:
-        output = join_to
-
-    # attach the data frame
-    arcpy.da.ExtendTable(
-        output,
-        arc_on,
-        s_arr,
-        pandas_on
-    )
-
-
-def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
+def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
     """
     Exports a pandas data frame and join it to an existing
     feature class or table. Intended for larger datasts.
@@ -393,36 +330,55 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc):
         Name of field in feature class to join on.
     out_fc: str
         Full path to the output feature class.
+    keep_common: bool, optional, default True
+        If True, only joined features will be retained.
+        IF False, all features will be retained.
 
     """
+    with ScratchGdb() as scratch:
 
-    # output the pandas table to a scratch workspace and add an attribute index
-    # scratch = arcpy.env.scratchGDB
-    scratch = r'D:\scratch\killme.gdb'
+        with TempWork(scratch.path):
+            temp_pd_name = '__pd_temp'
+            temp_arc_name = '__polys_temp'
 
-    with TempWork(scratch):
+            # output the pandas table to a scratch workspace and add an attribute index
+            pandas_to_arc(df, scratch.path, temp_pd_name, overwrite=True)
+            arcpy.AddIndex_management(temp_pd_name, pd_id_fld, pd_id_fld)
+
+            # do the join and export
+            create_layer(temp_arc_name, fc)
+
+            if keep_common:
+                join_type='KEEP_COMMON'
+            else:
+                join_type='KEEP_ALL'
+
+            arcpy.AddJoin_management(
+                temp_arc_name,
+                arc_id_fld,
+                temp_pd_name,
+                pd_id_fld,
+                join_type
+            )
+            with TempQualifiedFields(False):
+                arcpy.CopyFeatures_management(temp_arc_name, out_fc)
+
+            # tidy up
+            arcpy.Delete_management(temp_pd_name)
+            arcpy.Delete_management(temp_arc_name)
 
 
-        temp_pd_name = '__pd_temp'
-        temp_arc_name = '__polys_temp'
+#####################
+# deprecated methods
+#####################
 
-        # output the pandas table to a scratch workspace and add an attribute index
-        pandas_to_arc(df, scratch, temp_pd_name, overwrite=True)
-        arcpy.AddIndex_management(temp_pd_name, pd_id_fld, pd_id_fld)
 
-        # do the join and export
-        create_layer(temp_arc_name, fc)
-
-        arcpy.AddJoin_management(
-            temp_arc_name,
-            arc_id_fld,
-            temp_pd_name,
-            pd_id_fld,
-            'KEEP_COMMON'  # do we want to make this an input argument?
-        )
-        with TempQualifiedFields(False):
-            arcpy.CopyFeatures_management(temp_arc_name, out_fc)
-
-        # tidy up
-        arcpy.Delete_management(temp_pd_name)
-        arcpy.Delete_management(temp_arc_name)
+def pandas_join_to_arc(df,
+                       join_to,
+                       pandas_on,
+                       arc_on,
+                       output=None,
+                       keep_index=True,
+                       pandas_cols=None,
+                       arc_cols=None):
+    raise DeprecationWarning("***DEPRECATED -- see `pandas_to_features` method***")
