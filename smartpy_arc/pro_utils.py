@@ -6,7 +6,7 @@ arc_pandas and arc_utils libraties in lieu of this.
 """
 import arcpy
 import pandas as pd
-from .arc_pandas import *
+from smartpy_arc.arc_pandas import *
 
 
 def get_aprx(aprx_name='CURRENT'):
