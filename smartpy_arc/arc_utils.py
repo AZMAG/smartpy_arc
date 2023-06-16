@@ -42,6 +42,22 @@ def list_flds(data):
     return [f.name for f in arcpy.ListFields(data)]
 
 
+def list_fld_types(data):
+    """
+    Returns a dict of the field types,
+    keys are the field names, values the type and
+    char length if STRING/TEXT.
+    
+    """ 
+    d = {}
+    for f in arcpy.ListFields(data):
+        if f.type != 'String':
+            d[f.name] = f.type
+        else:
+            d[f.name] = '{}({})'.format(f.type, f.length)
+    return d
+
+
 def get_oid_fld(data):
     """
     Returns the name of objectid field.
@@ -350,7 +366,7 @@ def copy_oids(fc, fld_name):
         fc, fld_name, '!{}!'.format(oid_fld), 'PYTHON_9.3')
 
 
-def get_field_map(src, flds):
+def get_field_map(src, flds, fld_lens={}):
     """
     Returns a field map for an arcpy data itme from a list or dictionary.
     Useful for operations such as renaming columns merging feature classes.
@@ -377,6 +393,8 @@ def get_field_map(src, flds):
         out_f = fm.outputField
         out_f.name = new_name
         out_f.aliasName = new_name
+        if old_name in fld_lens:
+            out_f.length = fld_lens[old_name]
         fm.outputField = out_f
         fm.outputField.name = new_name
         mappings.addFieldMap(fm)
@@ -438,7 +456,7 @@ def create_layer(layer_name, table, flds=None, where=None, shp_prefix=None):
         arcpy.MakeFeatureLayer_management(table, layer_name, where, field_info=fi)
 
 
-def copy_feats(data, out_work, out_fc, flds=None, where=None):
+def copy_feats(data, out_work, out_fc, flds=None, where=None, fld_lens={}):
     """
     Copies features into a new feature class.
 
@@ -472,7 +490,7 @@ def copy_feats(data, out_work, out_fc, flds=None, where=None):
     """
     field_map = None
     if flds is not None:
-        field_map = get_field_map(data, flds)
+        field_map = get_field_map(data, flds, fld_lens)
 
     return arcpy.FeatureClassToFeatureClass_conversion(
         data,
