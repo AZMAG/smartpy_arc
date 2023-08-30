@@ -695,8 +695,13 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     # TODO: look for a better approach long term
     arr_flds = arr.dtype.fields
     date_flds = [k for k, v in arr_flds.items() if v[0] == np.dtype('<M8[us]')]
-    min_date = pd.Timestamp.min
-    max_date = pd.Timestamp.max
+    # note was previously using pandas built-ins, but these have issues
+    # ...with some datasets so hard code those timestamps here 
+    #min_date = pd.Timestamp.min  -- Timestamp('1677-09-21 00:12:43.145224193')
+    #max_date = pd.Timestamp.max  -- Timestamp('2262-04-11 23:47:16.854775807')
+    min_date = np.datetime64('1677-09-22')
+    max_date = np.datetime64('2262-04-12')
+    
     for f in date_flds:
         bad = (arr[f] < min_date) | (arr[f] > max_date)
         if sum(bad) > 0:
