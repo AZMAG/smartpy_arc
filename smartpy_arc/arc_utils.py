@@ -771,7 +771,7 @@ def pandas_to_array(df, keep_index=True, cols=None):
         arr = df[col].values
 
         # convert types to make ArcGIS happy
-        if arr.dtype == np.object:
+        if arr.dtype == object:
             arr = arr.astype(str)
         if arr.dtype == np.int64:
             max_val = arr.max()
@@ -780,7 +780,7 @@ def pandas_to_array(df, keep_index=True, cols=None):
                 arr = arr.astype(np.float64)
             else:
                 arr = arr.astype(np.int32)
-        if arr.dtype == np.bool:
+        if arr.dtype == bool:
             arr = arr.astype(np.int32)
         if arr.dtype == np.dtype('<M8[ns]'):
             arr = arr.astype('<M8[us]')
