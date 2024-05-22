@@ -690,9 +690,6 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
             class_name, fld_names, where_clause=where, null_value=null_dict)
 
     # need to handle bad datetimes
-    # times outside the pandas available range will be
-    # converted to default/null value
-    # TODO: look for a better approach long term
     arr_flds = arr.dtype.fields
     date_flds = [k for k, v in arr_flds.items() if v[0] == np.dtype('<M8[us]')]
     # note was previously using pandas built-ins, but these have issues
@@ -703,9 +700,10 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     max_date = np.datetime64('2262-04-12')
     
     for f in date_flds:
-        bad = (arr[f] < min_date) | (arr[f] > max_date)
-        if sum(bad) > 0:
-            arr[f][bad] = date_fill
+        # convert to datetime in pandas, use 'coerce' to eliminate bad values
+        date_ts = pd.to_datetime(arr[f], errors='coerce')
+        # assign back to array
+        arr[f] = date_ts.values
 
     # convert the structured array to a pandas data frame
     df = pd.DataFrame(arr)
