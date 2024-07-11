@@ -17,7 +17,13 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 
+_POLARS_INSTALLED = True
+try:
+    import polars as pl
+except:
+    _POLARS_INSTALLED = False
 
 ################################
 # utilities for inspecting data
@@ -935,6 +941,130 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
             arcpy.Delete_management(temp_arc_name)
 
 
+def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
+    """
+    Returns a polars.DataFrame for an ESRI feature
+    class or table.
+
+    Parameters:
+    -----------
+    data: str
+        Full path to the data
+    flds: list or dict, optional, defualt None
+        Fields to pull.
+        ...If dict, keys are field names, values new names
+        ...If list, the matching case will match.   
+    geometry_encoding: str, optional default `ESRISHAPE`
+        The geometry encoding to use. 
+            `ESRISHAPE`: Native binary geometry encoding
+            `ESRIJSON`: Native JSON format geometry encoding
+            `GEOJSON`: Open standard JSON format geometry encoding
+            `WKT—Well`: known text (WKT) geometry encoding
+            `WKB—Well`: known binary (WKB) geometry encoding
+    Returns:
+    --------
+    polars.DataFrame
+
+    """
+    if not _POLARS_INSTALLED:
+        raise ImportError('Must have polars installed: pip install polars')
+
+    # column names to pull
+    names = flds
+    if isinstance(flds, dict):
+        names = list(flds.keys())
+
+    # get the data from via arrow
+    df =  pl.from_arrow(arcpy.da.TableToArrowTable(data, names, geometry_encoding=geometry_encoding))
+
+    # re-name as needed
+    # ...match the requested case, regardless of what was in the data
+    if flds is not None:
+        df_cols = df.columns    
+        df_cols_lower = {c.lower(): c for c in df_cols}
+   
+        if isinstance(flds, list):
+            names_lower = {n.lower(): n for n in names}
+            new_names = {df_cols_lower[k]: v for k, v in names_lower.items() if v not in df.columns}
+
+        if isinstance(flds, dict):
+            new_names = {(k if k in df_cols else df_cols_lower[k.lower()]): v for k, v in flds.items()}
+
+        if len(new_names) > 0:
+            df = df.rename(new_names)
+
+    return df
+
+
+def polars_to_arc(df, out_work, out_cls, geo_col=None, srs=None, geometry_encoding='EsriShape'):
+    """
+    Export a polars.DataFrame to an ArcGIS feature class or table. 
+    
+    Parameters:
+    -----------
+    df: polars.DataFrame
+        Data to export
+    out_work: str
+        Full path to output workspace/gdb
+    out_cls: str
+        Name of the output table/feature class
+    geo_col: str, optional, default None
+        Name of the column to use for geometry,
+        omit if just exporting a table.
+    srs: arcpy.SpatialReference, optional, default None
+        Spatial reference for the geometry columns.
+        Required if exporting a geometry column.
+    geometry_encoding: str, optional default `EsriShape`
+        Type of geometry encoding, valid values:
+            `EsriShape`:  Native binary geometry encoding
+            `EsriJSON`: Native JSON format geometry encoding
+            `GeoJSON`: Open standard JSON format geometry encoding
+            `WKB`: known text (WKT) geometry encoding
+            `WKT`: known binary (WKB) geometry encoding
+
+    Returns:
+    --------
+    str: full path to the results. 
+
+    """
+    # convert from polars to arrow
+    arr = df.to_arrow()
+
+    # update schema and types as needed
+    new_schema = []
+    for f in arr.schema:
+        
+        f_name = f.name
+        f_type = f.type
+        f_metadata = None
+    
+        # need to convert large string to string
+        if f.type == pa.large_string():
+            f_type = pa.string()
+
+        # need to convert large binary to binary
+        if f.type == pa.large_binary():
+            f_type = pa.binary()
+    
+        # handle metadata for geometry/shape field
+        if f_name.lower() == geo_col.lower():
+            f_metadata = {
+                'esri.encoding': geometry_encoding,
+                'esri.sr_wkt': srs.exportToString(),
+            }
+
+        # update the schema 
+        new_schema.append(pa.field(f_name, f_type, metadata=f_metadata))
+
+    # re-cast everything and export to arc
+    arr2 = arr.cast(pa.schema(new_schema))
+
+    if geo_col is not None:
+        return arcpy.management.CopyFeatures(arr2, '{}//{}'.format(out_work, out_cls))
+    else:
+        return arcpy.managment.CopyRows(arr2, '{}//{}'.format(out_work, out_cls))
+    
+    
 #####################
 # deprecated methods
 #####################
