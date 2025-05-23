@@ -558,7 +558,7 @@ def get_centroids(polys, out_gdb, out_fc, flds_to_keep=None):
     df.index.name = 'src_{}'.format(oid_col)
     for col in df.columns:
         if str(df[col].dtype) == 'object':
-            df[col].fillna('', inplace=True)
+            df[col] = df[col].fillna('')
 
     # send back to arc
     out = '{}//{}'.format(out_gdb, out_fc)
@@ -959,8 +959,8 @@ def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
             `ESRISHAPE`: Native binary geometry encoding
             `ESRIJSON`: Native JSON format geometry encoding
             `GEOJSON`: Open standard JSON format geometry encoding
-            `WKT—Well`: known text (WKT) geometry encoding
-            `WKB—Well`: known binary (WKB) geometry encoding
+            `WKT`: known text (WKT) geometry encoding
+            `WKB`: known binary (WKB) geometry encoding
     Returns:
     --------
     polars.DataFrame
