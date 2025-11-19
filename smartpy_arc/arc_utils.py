@@ -72,6 +72,18 @@ def get_oid_fld(data):
     return arcpy.Describe(data).OIDFieldName
 
 
+def get_shp_fld(data):
+    """
+    Returns the name of the shape field. 
+    Returns None if not available.
+
+    """
+    for f in arcpy.ListFields(data):
+        if f.type == 'Geometry':
+            return f.name
+    return None
+
+
 ##################################
 # context managers for controlling 
 # arcpy state
@@ -941,7 +953,42 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
             arcpy.Delete_management(temp_arc_name)
 
 
-def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
+def arc_to_pandas_a(data, flds=None, geometry_encoding=None) -> pd.DataFrame:
+    """
+    Returns a pandas.DataFrame for an ESRI feature
+    class or table -- using Apache Arrow instead of numpy.
+
+    The panadas dataframe will have arrow dtypes. 
+
+    Parameters:
+    -----------
+    data: str
+        Full path to the data
+    flds: list or dict, optional, defualt None
+        Fields to pull.
+        ...If dict, keys are field names, values new names
+        ...If list, the matching case will match.   
+    geometry_encoding: str, optional default None
+        The geometry encoding to use.
+            None: shape/geometry columns will not be pulled
+            `ESRISHAPE`: Native binary geometry encoding
+            `ESRIJSON`: Native JSON format geometry encoding
+            `GEOJSON`: Open standard JSON format geometry encoding
+            `WKT`: known text (WKT) geometry encoding
+            `WKB`: known binary (WKB) geometry encoding
+        
+    Returns:
+    --------
+    pandas.DataFrame
+
+    """
+    return (
+        arc_to_polars(data, flds, geometry_encoding)
+        .to_pandas(use_pyarrow_extension_array=True)
+    )
+
+
+def arc_to_polars(data, flds=None, geometry_encoding=None) -> pl.DataFrame:
     """
     Returns a polars.DataFrame for an ESRI feature
     class or table.
@@ -954,8 +1001,9 @@ def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
         Fields to pull.
         ...If dict, keys are field names, values new names
         ...If list, the matching case will match.   
-    geometry_encoding: str, optional default `ESRISHAPE`
-        The geometry encoding to use. 
+    geometry_encoding: str, optional default None
+        The geometry encoding to use.
+            None: shape/geometry columns will not be pulled
             `ESRISHAPE`: Native binary geometry encoding
             `ESRIJSON`: Native JSON format geometry encoding
             `GEOJSON`: Open standard JSON format geometry encoding
@@ -968,6 +1016,12 @@ def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
     """
     if not _POLARS_INSTALLED:
         raise ImportError('Must have polars installed: pip install polars')
+
+    # so we don't pull the shape field when no fields are specified
+    if flds is None and geometry_encoding is None:
+        shp_fld = get_shp_fld(data)
+        if shp_fld is not None:
+            flds = [f for f in list_flds(data) if f != shp_fld]
 
     # column names to pull
     names = flds
