@@ -953,7 +953,7 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
             arcpy.Delete_management(temp_arc_name)
 
 
-def arc_to_pandas_a(data, flds=None, geometry_encoding=None) -> pd.DataFrame:
+def arc_to_pandas_a(data, flds=None, where=None, geometry_encoding=None) -> pd.DataFrame:
     """
     Returns a pandas.DataFrame for an ESRI feature
     class or table -- using Apache Arrow instead of numpy.
@@ -983,12 +983,12 @@ def arc_to_pandas_a(data, flds=None, geometry_encoding=None) -> pd.DataFrame:
 
     """
     return (
-        arc_to_polars(data, flds, geometry_encoding)
+        arc_to_polars(data, flds, where, geometry_encoding)
         .to_pandas(use_pyarrow_extension_array=True)
     )
 
 
-def arc_to_polars(data, flds=None, geometry_encoding=None) -> pl.DataFrame:
+def arc_to_polars(data, flds=None, where=None, geometry_encoding=None) -> pl.DataFrame:
     """
     Returns a polars.DataFrame for an ESRI feature
     class or table.
@@ -1029,7 +1029,8 @@ def arc_to_polars(data, flds=None, geometry_encoding=None) -> pl.DataFrame:
         names = list(flds.keys())
 
     # get the data from via arrow
-    df =  pl.from_arrow(arcpy.da.TableToArrowTable(data, names, geometry_encoding=geometry_encoding))
+    df =  pl.from_arrow(
+        arcpy.da.TableToArrowTable(data, names, where, geometry_encoding))
 
     # re-name as needed
     # ...match the requested case, regardless of what was in the data
