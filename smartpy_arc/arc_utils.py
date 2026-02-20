@@ -740,9 +740,19 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     # use more distinct null values
     if not fill_nulls:
         # note: need separate calls or it seems to change data types
-        df.replace(num_fill, np.nan, inplace=True)
-        df.replace([str_fill, 'nan'], np.nan, inplace=True)
-        df.replace(pd.Timestamp(date_fill), np.nan, inplace=True)
+        #df.replace(num_fill, np.nan, inplace=True)
+        #df.replace([str_fill, 'nan'], np.nan, inplace=True)
+        #df.replace(pd.Timestamp(date_fill), np.nan, inplace=True)
+        for col, dtype in df.dtypes.items():
+            dtype_n = dtype.name
+            if dtype_n == 'object':
+                # ...seems to be the only way not to get the weird downcasting message
+                is_null = df[col].isin([str_fill, 'nan'])
+                df.loc[is_null, col] = np.nan
+            elif dtype_n.startswith('datetime'):
+                df[col] = df[col].replace(pd.Timestamp(date_fill), np.nan)
+            elif dtype_n.startswith('int') or dtype_n.startswith('float'):
+                df[col] = df[col].replace(num_fill, np.nan)
 
     return df
 
