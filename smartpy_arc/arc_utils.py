@@ -963,7 +963,7 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
             arcpy.Delete_management(temp_arc_name)
 
 
-def arc_to_pandas_a(data, flds=None, where=None, geometry_encoding=None) -> pd.DataFrame:
+def arc_to_pandas_a(data, flds=None, where=None, arrow_backend=True, geometry_encoding=None) -> pd.DataFrame:
     """
     Returns a pandas.DataFrame for an ESRI feature
     class or table -- using Apache Arrow instead of numpy.
@@ -977,7 +977,10 @@ def arc_to_pandas_a(data, flds=None, where=None, geometry_encoding=None) -> pd.D
     flds: list or dict, optional, defualt None
         Fields to pull.
         ...If dict, keys are field names, values new names
-        ...If list, the matching case will match.   
+        ...If list, the matching case will match.
+    arrow_backend: bool, optional, default True
+        If True, uses arrow extension types.
+        If False, uses built-in pandas/numpy types.
     geometry_encoding: str, optional default None
         The geometry encoding to use.
             None: shape/geometry columns will not be pulled
@@ -994,7 +997,7 @@ def arc_to_pandas_a(data, flds=None, where=None, geometry_encoding=None) -> pd.D
     """
     return (
         arc_to_polars(data, flds, where, geometry_encoding)
-        .to_pandas(use_pyarrow_extension_array=True)
+        .to_pandas(use_pyarrow_extension_array=arrow_backend)
     )
 
 
