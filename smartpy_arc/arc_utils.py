@@ -72,6 +72,18 @@ def get_oid_fld(data):
     return arcpy.Describe(data).OIDFieldName
 
 
+def get_shp_fld(data):
+    """
+    Returns the name of the shape field. 
+    Returns None if not available.
+
+    """
+    for f in arcpy.ListFields(data):
+        if f.type == 'Geometry':
+            return f.name
+    return None
+
+
 ##################################
 # context managers for controlling 
 # arcpy state
@@ -558,7 +570,7 @@ def get_centroids(polys, out_gdb, out_fc, flds_to_keep=None):
     df.index.name = 'src_{}'.format(oid_col)
     for col in df.columns:
         if str(df[col].dtype) == 'object':
-            df[col].fillna('', inplace=True)
+            df[col] = df[col].fillna('')
 
     # send back to arc
     out = '{}//{}'.format(out_gdb, out_fc)
@@ -728,9 +740,19 @@ def arc_to_pandas(workspace_path, class_name, index_fld=None, flds=None, spatial
     # use more distinct null values
     if not fill_nulls:
         # note: need separate calls or it seems to change data types
-        df.replace(num_fill, np.nan, inplace=True)
-        df.replace([str_fill, 'nan'], np.nan, inplace=True)
-        df.replace(pd.Timestamp(date_fill), np.nan, inplace=True)
+        #df.replace(num_fill, np.nan, inplace=True)
+        #df.replace([str_fill, 'nan'], np.nan, inplace=True)
+        #df.replace(pd.Timestamp(date_fill), np.nan, inplace=True)
+        for col, dtype in df.dtypes.items():
+            dtype_n = dtype.name
+            if dtype_n == 'object':
+                # ...seems to be the only way not to get the weird downcasting message
+                is_null = df[col].isin([str_fill, 'nan'])
+                df.loc[is_null, col] = np.nan
+            elif dtype_n.startswith('datetime'):
+                df[col] = df[col].replace(pd.Timestamp(date_fill), np.nan)
+            elif dtype_n.startswith('int') or dtype_n.startswith('float'):
+                df[col] = df[col].replace(num_fill, np.nan)
 
     return df
 
@@ -941,7 +963,45 @@ def pandas_to_features(df, fc, pd_id_fld, arc_id_fld, out_fc, keep_common=True):
             arcpy.Delete_management(temp_arc_name)
 
 
-def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
+def arc_to_pandas_a(data, flds=None, where=None, arrow_backend=True, geometry_encoding=None) -> pd.DataFrame:
+    """
+    Returns a pandas.DataFrame for an ESRI feature
+    class or table -- using Apache Arrow instead of numpy.
+
+    The panadas dataframe will have arrow dtypes. 
+
+    Parameters:
+    -----------
+    data: str
+        Full path to the data
+    flds: list or dict, optional, defualt None
+        Fields to pull.
+        ...If dict, keys are field names, values new names
+        ...If list, the matching case will match.
+    arrow_backend: bool, optional, default True
+        If True, uses arrow extension types.
+        If False, uses built-in pandas/numpy types.
+    geometry_encoding: str, optional default None
+        The geometry encoding to use.
+            None: shape/geometry columns will not be pulled
+            `ESRISHAPE`: Native binary geometry encoding
+            `ESRIJSON`: Native JSON format geometry encoding
+            `GEOJSON`: Open standard JSON format geometry encoding
+            `WKT`: known text (WKT) geometry encoding
+            `WKB`: known binary (WKB) geometry encoding
+        
+    Returns:
+    --------
+    pandas.DataFrame
+
+    """
+    return (
+        arc_to_polars(data, flds, where, geometry_encoding)
+        .to_pandas(use_pyarrow_extension_array=arrow_backend)
+    )
+
+
+def arc_to_polars(data, flds=None, where=None, geometry_encoding=None) -> pl.DataFrame:
     """
     Returns a polars.DataFrame for an ESRI feature
     class or table.
@@ -954,13 +1014,14 @@ def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
         Fields to pull.
         ...If dict, keys are field names, values new names
         ...If list, the matching case will match.   
-    geometry_encoding: str, optional default `ESRISHAPE`
-        The geometry encoding to use. 
+    geometry_encoding: str, optional default None
+        The geometry encoding to use.
+            None: shape/geometry columns will not be pulled
             `ESRISHAPE`: Native binary geometry encoding
             `ESRIJSON`: Native JSON format geometry encoding
             `GEOJSON`: Open standard JSON format geometry encoding
-            `WKT—Well`: known text (WKT) geometry encoding
-            `WKB—Well`: known binary (WKB) geometry encoding
+            `WKT`: known text (WKT) geometry encoding
+            `WKB`: known binary (WKB) geometry encoding
     Returns:
     --------
     polars.DataFrame
@@ -969,13 +1030,20 @@ def arc_to_polars(data, flds=None, geometry_encoding='ESRISHAPE'):
     if not _POLARS_INSTALLED:
         raise ImportError('Must have polars installed: pip install polars')
 
+    # so we don't pull the shape field when no fields are specified
+    if flds is None and geometry_encoding is None:
+        shp_fld = get_shp_fld(data)
+        if shp_fld is not None:
+            flds = [f for f in list_flds(data) if f != shp_fld]
+
     # column names to pull
     names = flds
     if isinstance(flds, dict):
         names = list(flds.keys())
 
     # get the data from via arrow
-    df =  pl.from_arrow(arcpy.da.TableToArrowTable(data, names, geometry_encoding=geometry_encoding))
+    df =  pl.from_arrow(
+        arcpy.da.TableToArrowTable(data, names, where, geometry_encoding))
 
     # re-name as needed
     # ...match the requested case, regardless of what was in the data
