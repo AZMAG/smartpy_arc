@@ -1047,11 +1047,12 @@ def polars_to_arc(df, out_work, out_cls, geo_col=None, srs=None, geometry_encodi
             f_type = pa.binary()
     
         # handle metadata for geometry/shape field
-        if f_name.lower() == geo_col.lower():
-            f_metadata = {
-                'esri.encoding': geometry_encoding,
-                'esri.sr_wkt': srs.exportToString(),
-            }
+        if geo_col is not None:
+            if f_name.lower() == geo_col.lower() :
+                f_metadata = {
+                    'esri.encoding': geometry_encoding,
+                    'esri.sr_wkt': srs.exportToString(),
+                }
 
         # update the schema 
         new_schema.append(pa.field(f_name, f_type, metadata=f_metadata))
@@ -1062,7 +1063,7 @@ def polars_to_arc(df, out_work, out_cls, geo_col=None, srs=None, geometry_encodi
     if geo_col is not None:
         return arcpy.management.CopyFeatures(arr2, '{}//{}'.format(out_work, out_cls))
     else:
-        return arcpy.managment.CopyRows(arr2, '{}//{}'.format(out_work, out_cls))
+        return arcpy.management.CopyRows(arr2, '{}//{}'.format(out_work, out_cls))
     
     
 #####################
