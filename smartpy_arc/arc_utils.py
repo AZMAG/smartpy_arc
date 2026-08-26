@@ -797,18 +797,23 @@ def pandas_to_array(df, keep_index=True, cols=None):
         arr = df[col].values
 
         # convert types to make ArcGIS happy
+        # ...also need to deal w/ pandas 3 new string type
         if arr.dtype == object:
+            # pre-pandas 3 string
             arr = arr.astype(str)
-        if arr.dtype == np.int64:
+        elif arr.dtype == 'str':
+            # for pandas 3 string
+            arr = arr.astype(np.str_)
+        elif arr.dtype == np.int64:
             max_val = arr.max()
             min_val = arr.min()
             if min_val < -2147483647 or max_val > 2147483647:
                 arr = arr.astype(np.float64)
             else:
                 arr = arr.astype(np.int32)
-        if arr.dtype == bool:
+        elif arr.dtype == bool:
             arr = arr.astype(np.int32)
-        if arr.dtype == np.dtype('<M8[ns]'):
+        elif arr.dtype == np.dtype('<M8[ns]'):
             arr = arr.astype('<M8[us]')
 
         arr_values[col] = arr
