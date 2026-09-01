@@ -9,12 +9,9 @@ circular references.
 """
 import os
 import random
-import arcpy
-
-import os
-import random
 from collections import OrderedDict
 
+import arcpy
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -22,38 +19,66 @@ import pyarrow as pa
 _POLARS_INSTALLED = True
 try:
     import polars as pl
-except:
+except ImportError:
     _POLARS_INSTALLED = False
+
 
 ################################
 # utilities for inspecting data
 ################################
 
 
-def row_count(data):
+def row_count(data: str) -> int:
     """
     Return the # of rows/features in the provided data (feature class,
     table, feature layer or table view)
+
+    Parameters:
+    ----------
+    data: str
+        Full path to the feature class, layer or table.
+
+    Returns:
+    --------
+    int of the row count
 
     """
     return int(arcpy.GetCount_management(data).getOutput(0))
 
 
-def list_flds(data):
+def list_flds(data: str) -> list[str]:
     """
     Short hand for listing the field names in a feature class
     or table.
+
+    Parameters:
+    ----------
+    data: str
+        Full path to the feature class, layer or table.
+
+    Returns:
+    --------
+    list[str] of the field names
 
     """
     return [f.name for f in arcpy.ListFields(data)]
 
 
-def list_fld_types(data):
+def list_fld_types(data: str) -> dict[str, str]:
     """
     Returns a dict of the field types,
     keys are the field names, values the type and
     char length if STRING/TEXT.
     
+    Parameters:
+    ----------
+    data: str
+        Full path to the feature class, layer or table.
+
+    Returns:
+    --------
+    dict[str, str] of the field name and type descriptions.
+
     """ 
     d = {}
     for f in arcpy.ListFields(data):
@@ -64,19 +89,37 @@ def list_fld_types(data):
     return d
 
 
-def get_oid_fld(data):
+def get_oid_fld(data: str) -> str:
     """
     Returns the name of objectid field.
+    
+    Parameters:
+    ----------
+    data: str
+        Full path to the feature class, layer or table.
+
+    Returns:
+    --------
+    str
 
     """
     return arcpy.Describe(data).OIDFieldName
 
 
-def get_shp_fld(data):
+def get_shp_fld(data: str) -> str | None:
     """
     Returns the name of the shape field. 
-    Returns None if not available.
+    ...Returns None if not available.
+    
+    Parameters:
+    ----------
+    data: str
+        Full path to the feature class, layer or table.
 
+    Returns:
+    --------
+    str
+    
     """
     for f in arcpy.ListFields(data):
         if f.type == 'Geometry':
@@ -90,7 +133,7 @@ def get_shp_fld(data):
 ##################################
 
 
-class TempWork():
+class TempWork:
     """
     Context manager for temporarily changing workspaces. Use this
     for cases where you temporarily want to change the workspace
@@ -118,7 +161,7 @@ class TempWork():
         arcpy.env.workspace = self.old_workspace
 
 
-class TempOverwrite():
+class TempOverwrite:
     """
     Context manager for temporarily changing the arcpy ovewrite state.
 
@@ -135,7 +178,7 @@ class TempOverwrite():
         arcpy.env.overwriteOutput = self.old_state
 
 
-class TempQualifiedFields():
+class TempQualifiedFields:
     """
     Context manager for temporarily changing the qualified field names argument
 
@@ -152,7 +195,7 @@ class TempQualifiedFields():
         arcpy.env.qualifiedFieldNames = self.old_state
 
 
-class CheckoutExtension():
+class CheckoutExtension:
     """
     Context manager for temporarily checking out an ArcGIS extension.
     Will checkout the extension and then check it back in after
@@ -176,7 +219,7 @@ class CheckoutExtension():
         arcpy.CheckInExtension(self.extension_name)
 
 
-class ScratchGdb():
+class ScratchGdb:
     """
     Context manager for dealing w/ temporary file geodatabase
     files. Given a `with` session, creates the gdb. When leaving
@@ -328,7 +371,6 @@ class ScratchGdb():
                 arcpy.Delete_management('{}\\{}'.format(cls.scratch_folder, g))
             except:
                 continue
-
 
 
 ####################################
