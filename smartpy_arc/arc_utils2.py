@@ -3,7 +3,7 @@ Testing some new methods for integrating ESRI/arcpy with data frame libraries.
 
 """
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Literal
 
 import arcpy
 import pandas as pd
@@ -401,3 +401,72 @@ def df_to_arc(df: pd.DataFrame | pl.DataFrame,
         return arcpy.management.XYTableToPoint(arr2, out_path, x_col, y_col, coordinate_system=srs)
     else:
         return arcpy.management.CopyRows(arr2, out_path)
+
+
+# data type lookup from polars to arc
+# ...still need to resolve some types, datetimes.
+# ...also, some of these 'big' values need to be standard longs or doubles
+PL_TO_ARC_DTYPES = {
+    pl.Int8:        "SHORT",
+    pl.Int16:       "SHORT",
+    pl.Int32:       "LONG",
+    pl.Int64:       "BIGINTEGER",  # make this long or float?
+    pl.UInt8:       "SHORT",
+    pl.UInt16:      "LONG",
+    pl.UInt32:      "BIGINTEGER", # make this long or float?
+    pl.UInt64:      "BIGINTEGER", # make this long or float?
+    pl.Float32:     "FLOAT",
+    pl.Float64:     "DOUBLE",
+    pl.Decimal:     "DOUBLE",
+    pl.String:      "TEXT",
+    pl.Categorical: "TEXT",
+    pl.Date:        "DATE",
+    pl.Datetime:    "DATE",
+}
+
+
+def polars_to_fc(df: pl.DataFrame,
+                 out_work: str,
+                 out_fc: str,
+                 geo_col: str,
+                 geo_type: Literal['POINT', 'MULTIPOINT', 'POLYGON', 'POLYLINE'] ,
+                 srs: arcpy.SpatialReference) -> str:
+    """
+    Exports a polars data frame w/ a geometry/spatial column to a feature class.
+    ** Assumes the geometry is in WKB. **
+
+    **Note some type hints issues still to resolve, the code works but incorrectly 
+    flags errors from the calling functions
+
+    **This is MUCH faster than df_to_arc. 
+
+    """
+    # create the oputput
+    res1 = arcpy.management.CreateFeatureclass(
+        out_work,
+        out_fc,
+        geometry_type=geo_type,
+        spatial_reference=srs
+    )
+
+    # add fields
+    flds_to_add = []
+    for fld, dt in df.schema.items():
+        # get the data type
+        arc_dt = PL_TO_ARC_DTYPES.get(dt)
+        if arc_dt is None:
+            print(f'cant find data type - {fld}: {dt}')
+            continue
+        if fld.lower().startswith('objectid') | fld.lower().startswith('shape'):
+            continue
+        flds_to_add.append([fld, arc_dt])
+    res2 = arcpy.management.AddFields(res1, flds_to_add)
+
+    # iterate and insert
+    cursor_flds = [f[0] for f in flds_to_add]
+    with arcpy.da.InsertCursor(res2, cursor_flds + ['SHAPE@WKB']) as cursor:
+        for row in df.select(cursor_flds + [geo_col]).iter_rows():
+            cursor.insertRow(row)
+
+    # return back the full path to the result
+    return '{}//{}'.format(out_work, out_fc)
