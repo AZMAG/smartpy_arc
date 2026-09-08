@@ -194,7 +194,53 @@ def scan_arc(data: str,
              where: str | None = None,
              strict: bool = True):
     """
-    ...
+    Scan method for arc/esri datasets.
+
+    Parameters:
+    -----------
+    data: str
+        Full path to the geodatabase feature class or table.
+    flds: list or dict, optional, default None
+        Fields to pull.
+        If None - pull all fields.
+        If list - pull a subset of fields, can re-case.
+        If dict - get subset of fields and re-name.
+    where: str, optional, default None
+        Optional definition query to apply.
+    strict: bool, optional, default True
+         If True, an error will be raised ina field is not found.
+         Otherwise the field will be ommitted from the results.
+
+    Returns:
+    --------
+    pl.LazyFrame
+
+    Sample usage:
+    -------------
+    my_dataset = some_path
+    
+    # case 1 - pull all fields
+    my_lf = scan_arc(my_dataset)
+
+    # case 2 - pull subset of fields
+    # ...shape field will be pulled in binary column
+    mylf2 = scan_arc(
+        my_dataset,
+        flds=['col1', 'Shape', 'SHAPE@AREA']
+    )
+
+    # case 3 - pull subset and rename
+    my_lf3 = scan_arc(
+        my_dataset,
+        flds={
+            'col1': 'my_fun_col',
+            'Shape': 'geo_col,
+            'SHAPE@X: 'x_col',
+            'SHAPE@Y: 'y_col',
+            'SHAPE@AREA': area_col
+        }
+    )
+     
     """
     # get the schema
     arc_schema = ArcSchema(data)
