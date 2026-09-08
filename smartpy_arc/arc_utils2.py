@@ -233,11 +233,11 @@ def scan_arc(data: str,
     my_lf3 = scan_arc(
         my_dataset,
         flds={
-            'col1': 'my_fun_col',
-            'Shape': 'geo_col,
-            'SHAPE@X: 'x_col',
-            'SHAPE@Y: 'y_col',
-            'SHAPE@AREA': area_col
+            'col1':       'my_fun_col',
+            'Shape':      'geo_col,
+            'SHAPE@X:     'x_col',
+            'SHAPE@Y:     'y_col',
+            'SHAPE@AREA': 'area_col'
         }
     )
      
