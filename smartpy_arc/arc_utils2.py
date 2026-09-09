@@ -401,15 +401,34 @@ def polars_to_fc(df: pl.DataFrame,
                  out_fc: str,
                  geo_col: str,
                  geo_type: Literal['POINT', 'MULTIPOINT', 'POLYGON', 'POLYLINE'],
-                 srs: arcpy.SpatialReference) -> str | os.PathLike:
+                 srs: arcpy.SpatialReference = DEFAULT_SRS) -> str | os.PathLike:
     """
     Exports a polars data frame w/ a geometry/spatial column to a feature class.
     ** Assumes the geometry is in WKB. **
 
-    **Note some type hints issues still to resolve, the code works but incorrectly 
-    flags errors from the calling functions
+    Parameters:
+    -----------
+    df: polars.DataFrame
+        Data frame to export.
+    out_work: str 
+        Full path to the output gdb/workspace.
+    out_fc: str
+        Name of the output feature class.
+    geo_col: str
+        Name of column containing geometry.
+        Column type should be pl.Binary.
+        Geometry should be in `WKB` format.
+    y_col: str
+        Name of column containing y values.
+    srs: arcpy.SpatialReference, optional
+        Output spatial reference. If not provided
+        module-level `DEFAULT_SRS` will be used.
+        (State Plane AZ Central NAD83 HARN)
 
-    **This is MUCH faster than df_to_arc. 
+    Returns:
+    --------
+    str: 
+        Full path to resulting feature class.
 
     """
     # create the oputput feature class
@@ -419,7 +438,7 @@ def polars_to_fc(df: pl.DataFrame,
         geometry_type=geo_type,
         spatial_reference=srs
     )[0]
-
+    
     # add fields
     out_flds, df_flds = _add_fields(df, new_fc)
     out_flds += ['SHAPE@WKB']
@@ -438,7 +457,22 @@ def polars_to_arc_table(df: pl.DataFrame,
                         out_work: str,
                         out_table: str) -> str | os.PathLike:
     """
-    Exports a polars data frame to an Arc/ESRI stand-alone table.
+    Exports a polars data frame to an Arc/ESRI table. Only 
+    non-spatial and non-binary columns will be in the result.
+
+    Parameters:
+    -----------
+    df: polars.DataFrame
+        Data frame to export.
+    out_work: str 
+        Full path to the output gdb/workspace.
+    out_table: str
+        Name of the output table.
+
+    Returns:
+    --------
+    str: 
+        Full path to resulting table.
 
     """
     # create the output table
@@ -462,7 +496,31 @@ def polars_xy_to_fc(df: pl.DataFrame,
                     x_col: str,
                     y_col: str,
                     srs: arcpy.SpatialReference = DEFAULT_SRS) -> str | os.PathLike:
-    """....
+    """
+    Export a polars data frame with x,y cols into an Arc/ESRI point feature class.
+
+    Parameters:
+    -----------
+    df: polars.DataFrame
+        Data frame to export.
+    out_work: str 
+        Full path to the output gdb/workspace.
+    out_fc: str
+        Name of the output feature class.
+    x_col: str
+        Name of column containing x values.
+    y_col: str
+        Name of column containing y values.
+    srs: arcpy.SpatialReference, optional
+        Output spatial reference. If not provided
+        module-level `DEFAULT_SRS` will be used.
+        (State Plane AZ Central NAD83 HARN)
+
+    Returns:
+    --------
+    str: 
+        Full path to resulting feature class.
+
     """
     # create the oputput feature class
     new_fc = arcpy.management.CreateFeatureclass(
