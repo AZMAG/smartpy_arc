@@ -543,3 +543,137 @@ def polars_xy_to_fc(df: pl.DataFrame,
 
     # return back the full the path to the result
     return new_fc
+
+
+########################################
+# PANDAS WRAPPERS
+# ...underlying logic is still polars,
+# ...but provide easy pandas access
+########################################
+
+
+def arc_to_pandas2(data: str,
+                   flds: list[str] | dict[str, str] | None = None,
+                   where: str | None = None,
+                   index_fld: str | list[str] | None = None,
+                   strict: bool = True, 
+                   use_pyarrow=False) -> pd.DataFrame:
+    """
+    Updated method for importing ESRI feature class or table to pandas.
+    **This method will automatically load geometry and SHAPE@ columns.**
+    Use the `flds` arg to ommit these.
+
+    Parameters:
+    -----------
+    data: str
+        Full path to the geodatabase feature class or table.
+    flds: list or dict, optional, default None
+        Fields to pull.
+        If None - pull all fields.
+        If list - pull a subset of fields, can re-case.
+        If dict - get subset of fields and re-name.
+    where: str, optional, default None
+        Optional definition query to apply.
+    index_fld: str or list[str], optional, default None
+        Optionally prescribes columns to serve as index.
+    strict: bool, optional, default True
+         If True, an error will be raised ina field is not found.
+         Otherwise the field will be ommitted from the results.
+    use_pyarrow: bool optional, default False
+        Whether or not to use polars/pyarrow dtypes.
+        If True, allows faster conversion between polars/pandas.
+
+    Returns:
+    --------
+    pandas.DataFrame
+
+    """
+    df = (
+        scan_arc(data, flds, where, strict)
+        .collect()
+        .to_pandas(use_pyarrow_extension_array=use_pyarrow)
+    )
+    if index_fld is not None:
+        df = df.set_index(index_fld, drop=True)
+    return df
+
+
+def pandas_to_fc(df: pd.DataFrame,
+                 out_work: str,
+                 out_fc: str,
+                 geo_col: str,
+                 geo_type: Literal['POINT', 'MULTIPOINT', 'POLYGON', 'POLYLINE'],
+                 include_index: bool = True,
+                 srs: arcpy.SpatialReference = DEFAULT_SRS) -> str | os.PathLike:
+    """
+    Exports pandas data frame w/ a geometry/spatial column to a feature class.
+    ** Assumes the geometry is in WKB. **
+
+    Parameters:
+    -----------
+    df: pandas.DataFrame
+        Data frame to export.
+    out_work: str 
+        Full path to the output gdb/workspace.
+    out_fc: str
+        Name of the output feature class.
+    geo_col: str
+        Name of column containing geometry.
+        Column type should be pl.Binary.
+        Geometry should be in `WKB` format.
+    geo_type: str
+        Geometry type, should be 'POINT', 'POLYLINE', 'POLYGON'
+        or 'MULTIPOINT'.
+    include_index: bool, optional default True
+        Include index as column(s) if True.
+    srs: arcpy.SpatialReference, optional
+        Output spatial reference. If not provided
+        module-level `DEFAULT_SRS` will be used.
+        (State Plane AZ Central NAD83 HARN)
+
+    Returns:
+    --------
+    str: 
+        Full path to resulting feature class.
+
+    """
+    return polars_to_fc(
+        pl.from_pandas(df, include_index=include_index),
+        out_work,
+        out_fc,
+        geo_col,
+        geo_type,
+        srs
+    )
+
+
+def pandas_to_arc_table(df: pd.DataFrame,
+                        out_work: str,
+                        out_table: str,
+                        include_index: bool = True) -> str | os.PathLike:
+    """
+    Exports a pandas data frame to an Arc/ESRI table. Only 
+    non-spatial and non-binary columns will be in the result.
+
+    Parameters:
+    -----------
+    df: pandas.DataFrame
+        Data frame to export.
+    out_work: str 
+        Full path to the output gdb/workspace.
+    out_table: str
+        Name of the output table.
+    include_index: bool, optional default True
+        Include index as column(s) if True.
+        
+    Returns:
+    --------
+    str: 
+        Full path to resulting table.
+
+    """
+    return polars_to_arc_table(
+        pl.from_pandas(df, include_index=include_index),
+        out_work,
+        out_table
+    )
