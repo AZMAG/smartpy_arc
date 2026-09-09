@@ -173,9 +173,9 @@ class ArcSchema:
 def scan_arc(data: str,
              flds: list[str] | dict[str, str] | None = None,
              where: str | None = None,
-             strict: bool = True):
+             strict: bool = True) -> pl.LazyFrame:
     """
-    Scan method for arc/esri datasets.
+    Polars scan method for arc/esri datasets.
 
     Parameters:
     -----------
@@ -304,7 +304,7 @@ PL_TO_ARC_DTYPES = {
 
 def get_clean_name(orig_name: str, replace_char: str = '_') -> str:
     """
-    Return a field name suitable for field names.
+    Return a clean name suitable for field names.
 
     Pameters:
     ---------
@@ -418,8 +418,9 @@ def polars_to_fc(df: pl.DataFrame,
         Name of column containing geometry.
         Column type should be pl.Binary.
         Geometry should be in `WKB` format.
-    y_col: str
-        Name of column containing y values.
+    geo_type: str
+        Geometry type, should be 'POINT', 'POLYLINE', 'POLYGON'
+        or 'MULTIPOINT'.
     srs: arcpy.SpatialReference, optional
         Output spatial reference. If not provided
         module-level `DEFAULT_SRS` will be used.
@@ -438,7 +439,7 @@ def polars_to_fc(df: pl.DataFrame,
         geometry_type=geo_type,
         spatial_reference=srs
     )[0]
-    
+
     # add fields
     out_flds, df_flds = _add_fields(df, new_fc)
     out_flds += ['SHAPE@WKB']
