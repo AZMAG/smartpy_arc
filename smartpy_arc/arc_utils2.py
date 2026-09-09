@@ -252,13 +252,7 @@ def scan_arc(data: str,
                       n_rows: int | None,
                       batch_size: int | None) -> Iterator[pl.DataFrame]:
 
-        # TEMP -- so we can check what's being passed in
-        print(f'with columns: {with_columns}')
-        print(f'predicate: {predicate}')
-        print(f'n rows: {n_rows}')
-        print(f'batch size: {batch_size}')
-
-        with arcpy.da.SearchCursor(data, cursor_flds) as cursor:
+        with arcpy.da.SearchCursor(data, cursor_flds, where_clause=where) as cursor:
             rows = []
             batch_count = 0
 
