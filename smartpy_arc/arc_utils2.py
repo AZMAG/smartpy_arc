@@ -2,6 +2,7 @@
 Testing some new methods for integrating ESRI/arcpy with data frame libraries.
 
 """
+import os
 from collections.abc import Iterator
 from typing import Any, Literal
 
@@ -450,38 +451,38 @@ def get_clean_name(orig_name: str, replace_char: str = '_') -> str:
     return clean_name.strip()
 
 
-def polars_to_fc(df: pl.DataFrame,
-                 out_work: str,
-                 out_fc: str,
-                 geo_col: str,
-                 geo_type: Literal['POINT', 'MULTIPOINT', 'POLYGON', 'POLYLINE'],
-                 srs: arcpy.SpatialReference) -> str:
+def _add_fields(df: pl.DataFrame,
+                out_cls: str | os.PathLike[str]) -> tuple[list[str], list[str]]:
     """
-    Exports a polars data frame w/ a geometry/spatial column to a feature class.
-    ** Assumes the geometry is in WKB. **
+    Adds fields to an existing feature class or stand-alone 
+    table to match the provided data frame schema.
 
-    **Note some type hints issues still to resolve, the code works but incorrectly 
-    flags errors from the calling functions
+    Parameters:
+    -----------
+    df: polars.DataFrame
+        Data frame with the schema to apply.
+    out_cls: str
+        Full path to an existing feature class or 
+        stand-alone table.
 
-    **This is MUCH faster than df_to_arc. 
+    Returns:
+    --------
+    tuple[list[str], list[str]]
+    ...first item is list of output field names
+    ...second item is corresponding df column names
 
     """
-    # create the oputput
-    res1 = arcpy.management.CreateFeatureclass(
-        out_work,
-        out_fc,
-        geometry_type=geo_type,
-        spatial_reference=srs
-    )
-
-    # add fields
-    d = arcpy.Describe(res1)
+    d = arcpy.Describe(out_cls)
+    class_type = d.dataType
     out_oid_fld = d.oidFieldName
-    out_shp_fld = d.shapeFieldName
+    out_shp_fld = None
+
+    if class_type == 'FeatureClass':
+        out_shp_fld = d.shapeFieldName
 
     out_flds = []
     df_flds = []
-
+    
     for fld, dt in df.schema.items():
         # don't add fields for objectid/shape
         if fld == out_shp_fld or fld.lower().startswith('shape@'):
@@ -490,7 +491,7 @@ def polars_to_fc(df: pl.DataFrame,
             print('ignoring df column `{}`, used as OID in output'.format(fld))
             continue
         
-         # get the corresponding arc data type
+            # get the corresponding arc data type
         arc_dt = PL_TO_ARC_DTYPES.get(dt.base_type())
         if arc_dt is None:
             print('ignoring df column `{}`, datatype `{}` not found'.format(fld, dt))
@@ -509,13 +510,95 @@ def polars_to_fc(df: pl.DataFrame,
             out_flds.append([clean_fld, arc_dt, clean_fld])
         df_flds.append(fld)
 
-    res2 = arcpy.management.AddFields(res1, out_flds)
-    
-    # iterate and insert
-    cursor_flds = [f[0] for f in out_flds] + ['SHAPE@WKB']
-    with arcpy.da.InsertCursor(res2, cursor_flds) as cursor:
-        for row in df.select(df_flds + [geo_col]).iter_rows():
+    arcpy.management.AddFields(out_cls, out_flds)
+    return [f[0] for f in out_flds], df_flds
+
+
+def polars_to_fc(df: pl.DataFrame,
+                 out_work: str,
+                 out_fc: str,
+                 geo_col: str,
+                 geo_type: Literal['POINT', 'MULTIPOINT', 'POLYGON', 'POLYLINE'],
+                 srs: arcpy.SpatialReference) -> str | os.PathLike:
+    """
+    Exports a polars data frame w/ a geometry/spatial column to a feature class.
+    ** Assumes the geometry is in WKB. **
+
+    **Note some type hints issues still to resolve, the code works but incorrectly 
+    flags errors from the calling functions
+
+    **This is MUCH faster than df_to_arc. 
+
+    """
+    # create the oputput feature class
+    new_fc = arcpy.management.CreateFeatureclass(
+        out_work,
+        out_fc,
+        geometry_type=geo_type,
+        spatial_reference=srs
+    )[0]
+
+    # add fields
+    out_flds, df_flds = _add_fields(df, new_fc)
+    out_flds += ['SHAPE@WKB']
+    df_flds += [geo_col]
+
+    # do the inserts
+    with arcpy.da.InsertCursor(new_fc, out_flds) as cursor:
+        for row in df.select(df_flds).iter_rows():
             cursor.insertRow(row)
 
     # return back the full path to the result
-    return '{}//{}'.format(out_work, out_fc)
+    return new_fc
+
+
+def polars_to_arc_table(df: pl.DataFrame,
+                        out_work: str,
+                        out_table: str) -> str | os.PathLike:
+    """
+    Exports a polars data frame to an Arc/ESRI stand-alone table.
+
+    """
+    # create the output table
+    new_tab = arcpy.management.CreateTable(out_work, out_table)[0]
+
+    # add the fields
+    out_flds, df_flds = _add_fields(df, new_tab)
+
+    # do the inserts
+    with arcpy.da.InsertCursor(new_tab, out_flds) as cursor:
+        for row in df.select(df_flds).iter_rows():
+            cursor.insertRow(row)
+
+    # return back the full path to the result
+    return new_tab
+
+
+def polars_xy_to_fc(df: pl.DataFrame,
+                    out_work: str, 
+                    out_fc: str, 
+                    x_col: str,
+                    y_col: str,
+                    srs: arcpy.SpatialReference = DEFAULT_SRS) -> str | os.PathLike:
+    """....
+    """
+    # create the oputput feature class
+    new_fc = arcpy.management.CreateFeatureclass(
+        out_work,
+        out_fc,
+        geometry_type='POINT',
+        spatial_reference=srs
+    )[0]
+    
+    # add the fields
+    out_flds, df_flds = _add_fields(df, new_fc)
+    out_flds += ['SHAPE@XY']
+    df_flds_kw = {'_xy': pl.concat_list(x_col, y_col)}
+
+    # do the inserts
+    with arcpy.da.InsertCursor(new_fc, out_flds) as cursor:
+            for row in df.select(*df_flds, **df_flds_kw).iter_rows():
+                cursor.insertRow(row)
+
+    # return back the full the path to the result
+    return new_fc
