@@ -373,7 +373,7 @@ def _add_fields(df: pl.DataFrame,
             print('ignoring df column `{}`, used as OID in output'.format(fld))
             continue
         
-            # get the corresponding arc data type
+        # get the corresponding arc data type
         arc_dt = PL_TO_ARC_DTYPES.get(dt.base_type())
         if arc_dt is None:
             print('ignoring df column `{}`, datatype `{}` not found'.format(fld, dt))
