@@ -398,17 +398,17 @@ def df_to_arc(df: pd.DataFrame | pl.DataFrame,
 
 
 # data type lookup from polars to arc
-# ...still need to resolve some types, datetimes.
-# ...also, some of these 'big' values need to be standard longs or doubles
+# ...right now not using BIGINTEGER because it seems to break 
+# ...various arc tools - use DOUBLE for now but revisit this
 PL_TO_ARC_DTYPES = {
     pl.Int8:        "SHORT",
     pl.Int16:       "SHORT",
     pl.Int32:       "LONG",
-    pl.Int64:       "BIGINTEGER",  # make this long or float?
+    pl.Int64:       "DOUBLE", # could be BIGINTEGER but use double for now
     pl.UInt8:       "SHORT",
     pl.UInt16:      "LONG",
-    pl.UInt32:      "BIGINTEGER", # make this long or float?
-    pl.UInt64:      "BIGINTEGER", # make this long or float?
+    pl.UInt32:      "DOUBLE", # could be BIGINTEGER but use double for now
+    pl.UInt64:      "DOUBLE", # could be BIGINTEGER but use double for now
     pl.Float32:     "FLOAT",
     pl.Float64:     "DOUBLE",
     pl.Decimal:     "DOUBLE",
@@ -419,11 +419,42 @@ PL_TO_ARC_DTYPES = {
 }
 
 
+def get_clean_name(orig_name: str, replace_char: str = '_') -> str:
+    """
+    Return a field name suitable for field names.
+
+    Pameters:
+    ---------
+    orig_name: str
+        Original name.
+    replace_char: str, optional, default `_`
+        Char to replace bad chars with.
+
+    Returns:
+    --------
+    str 
+
+    """
+    bad_chars = [
+            ' ', '.', '+', "-", '@',
+            "/", "\\", ")", "(", "*", "&", "'", ","
+    ]
+    clean_name = orig_name.strip()
+    for char in bad_chars:
+        clean_name = clean_name.replace(char, replace_char)
+
+    # remove duplicate space
+    while (replace_char * 2) in clean_name:
+        clean_name = clean_name.replace(replace_char * 2, replace_char)
+
+    return clean_name.strip()
+
+
 def polars_to_fc(df: pl.DataFrame,
                  out_work: str,
                  out_fc: str,
                  geo_col: str,
-                 geo_type: Literal['POINT', 'MULTIPOINT', 'POLYGON', 'POLYLINE'] ,
+                 geo_type: Literal['POINT', 'MULTIPOINT', 'POLYGON', 'POLYLINE'],
                  srs: arcpy.SpatialReference) -> str:
     """
     Exports a polars data frame w/ a geometry/spatial column to a feature class.
@@ -444,22 +475,46 @@ def polars_to_fc(df: pl.DataFrame,
     )
 
     # add fields
-    flds_to_add = []
-    for fld, dt in df.schema.items():
-        # get the data type
-        arc_dt = PL_TO_ARC_DTYPES.get(dt)
-        if arc_dt is None:
-            print(f'cant find data type - {fld}: {dt}')
-            continue
-        if fld.lower().startswith('objectid') | fld.lower().startswith('shape'):
-            continue
-        flds_to_add.append([fld, arc_dt])
-    res2 = arcpy.management.AddFields(res1, flds_to_add)
+    d = arcpy.Describe(res1)
+    out_oid_fld = d.oidFieldName
+    out_shp_fld = d.shapeFieldName
 
+    out_flds = []
+    df_flds = []
+
+    for fld, dt in df.schema.items():
+        # don't add fields for objectid/shape
+        if fld == out_shp_fld or fld.lower().startswith('shape@'):
+            continue
+        if fld.lower() == out_oid_fld.lower():
+            print('ignoring df column `{}`, used as OID in output'.format(fld))
+            continue
+        
+         # get the corresponding arc data type
+        arc_dt = PL_TO_ARC_DTYPES.get(dt.base_type())
+        if arc_dt is None:
+            print('ignoring df column `{}`, datatype `{}` not found'.format(fld, dt))
+            continue
+        
+        # get clean field if needed
+        clean_fld = get_clean_name(fld)
+        if  fld != clean_fld:
+            print('field `{}` renamed to `{}`'.format(fld, clean_fld))
+
+        # add it
+        if dt == pl.String:
+            max_char_len = df.select(pl.col(fld).str.len_chars().max()).item()
+            out_flds.append([clean_fld, arc_dt, clean_fld, max_char_len])
+        else:
+            out_flds.append([clean_fld, arc_dt, clean_fld])
+        df_flds.append(fld)
+
+    res2 = arcpy.management.AddFields(res1, out_flds)
+    
     # iterate and insert
-    cursor_flds = [f[0] for f in flds_to_add]
-    with arcpy.da.InsertCursor(res2, cursor_flds + ['SHAPE@WKB']) as cursor:
-        for row in df.select(cursor_flds + [geo_col]).iter_rows():
+    cursor_flds = [f[0] for f in out_flds] + ['SHAPE@WKB']
+    with arcpy.da.InsertCursor(res2, cursor_flds) as cursor:
+        for row in df.select(df_flds + [geo_col]).iter_rows():
             cursor.insertRow(row)
 
     # return back the full path to the result
