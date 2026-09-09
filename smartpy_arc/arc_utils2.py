@@ -10,26 +10,6 @@ import arcpy
 import pandas as pd
 import polars as pl
 from polars.io.plugins import register_io_source
-import pyarrow as pa
-
-
-def get_arc_schema__OLD(data: str) -> dict[str, str]:
-    """
-    Returns the schema of an esri feature class or table.
-
-    Parameters:
-    ----------
-    data: str
-        Full path to the feature class, layer or table.
-    
-    Returns:
-    --------
-    dict[str, str]
-    ...keyed by field names
-    ...values are corresponding dtypes
-
-    """
-    return {f.name: f.type for f in arcpy.ListFields(data)}
 
 
 def get_cased_field_name_mapping(arc_flds: list[str], 
@@ -298,104 +278,6 @@ def scan_arc(data: str,
 # default spatial reference
 # ...az state plane central nad83 harn
 DEFAULT_SRS = arcpy.SpatialReference(2868)
-
-
-def df_to_arc(df: pd.DataFrame | pl.DataFrame,
-              out_work: str,
-              out_cls: str,
-              geo_col: str | None = None,
-              x_col: str | None = None,
-              y_col: str | None = None,
-              srs: arcpy.SpatialReference = DEFAULT_SRS,
-              geometry_encoding: str  = 'EsriShape', 
-              keep_index: bool = True):
-    """
-    Exports a data frame to an ArcGIS feature class or table.
-
-    Parameters:
-    -----------
-    df: pandas.DataFrame or polars.DataFrame
-        Dataframe to export.
-    out_work: str
-        Full path to the ouput gdb.
-    out_cls: str
-        Name of the output table/feature class
-    geo_col: str, optional, default None
-        Name of the column containing geometry.
-        Omit if exporting table or using xy columns.
-        Note: if both geo_col AND xy cols are provided,
-        the geo_col will be used for the geomtry and the
-        xy cols will be exported as double fields.
-    x_col: str optional, default None
-        If provided, name of the column containing point x values.
-    y_col: str, optional, default None
-        If provided, name of the column containing point x values.
-    srs: arcpy.SpatialReference, optional default WKID 2868
-        Spatial reference for the geometry or xy cols.
-        Defined by the constant `DEFAULT_SRS`, which
-        is set to the MAG standard az state plance centeral nad83 harn.
-    geomtry_encoding: str optional, default 'EsriShape`
-        Only applicable if geo_Col provided. 
-        Defines the type of geometry encoding, valid values:
-            `EsriShape`:  Native binary geometry encoding
-            `EsriJSON`: Native JSON format geometry encoding
-            `GeoJSON`: Open standard JSON format geometry encoding
-            `WKB`: known text (WKT) geometry encoding
-            `WKT`: known binary (WKB) geometry encoding
-    keep_index: bool, optional, default True
-        Only applicable for pandas.DataFrame. Whether or
-        not to include the index in the output.
-            
-    Returns:
-    --------
-    str: full path to the results. 
-    
-    """
-    # data frame to arrow
-    arr = None
-    if isinstance(df, pd.DataFrame):
-        arr = pa.Table.from_pandas(df, preserve_index=keep_index)
-    elif isinstance(df, pl.DataFrame):
-        arr = df.to_arrow()
-    else:
-        raise TypeError('df must be pandas.DataFrame or polars.DataFrame')
-
-    # update arrow schema and types as needed
-    new_schema = []
-    for f in arr.schema:
-            
-        f_name = f.name
-        f_type = f.type
-        f_metadata = None
-        
-        # need to convert large string to string
-        if f.type == pa.large_string():
-            f_type = pa.string()
-
-        # need to convert large binary to binary
-        if f.type == pa.large_binary():
-            f_type = pa.binary()
-
-        # handle metadata for geometry/shape field
-        if geo_col is not None and f_name.lower() == geo_col.lower():
-            f_metadata = {
-                'esri.encoding': geometry_encoding,
-                'esri.sr_wkt': srs.exportToString('WKT'),
-            }
-        
-        # update the schema 
-        new_schema.append(pa.field(f_name, f_type, metadata=f_metadata))
-
-    # re-cast everything and export to arc
-    arr2 = arr.cast(pa.schema(new_schema))
-
-    out_path = '{}//{}'.format(out_work, out_cls)
-    if geo_col is not None:
-        return arcpy.management.CopyFeatures(arr2, out_path)
-    elif x_col is not None and y_col is not None:
-        return arcpy.management.XYTableToPoint(arr2, out_path, x_col, y_col, coordinate_system=srs)
-    else:
-        return arcpy.management.CopyRows(arr2, out_path)
 
 
 # data type lookup from polars to arc
